@@ -1,0 +1,303 @@
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<html class="windows x86 no-js" lang="en" dir="ltr" data-latest-firefox="65.0.2" data-esr-versions="60.5.2" data-gtm-container-id="GTM-MW3R8V" data-gtm-page-id="/firefox/firstrun/" data-stub-attribution-rate="1.0">
+  <head>
+    <meta charset="utf-8">
+
+    <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/site.ec263d31b78e.js" charset="utf-8"></script>
+
+    <!--[if !lte IE 8]><!-->
+    
+    <!--<![endif]-->
+
+<!--
+             _.-~-.
+           7''  Q..\
+        _7         (_
+      _7  _/    _q.  /
+    _7 . ___  /VVvv-'_                                            .
+   7/ / /~- \_\\      '-._     .-'                      /       //
+  ./ ( /-~-/||'=.__  '::. '-~'' {             ___   /  //     ./{
+ V   V-~-~| ||   __''_   ':::.   ''~-~.___.-'' _/  // / {_   /  {  /
+  VV/-~-~-|/ \ .'__'. '.    '::                     _ _ _        ''.
+  / /~~~~||VVV/ /  \ )  \        _ __ ___   ___ ___(_) | | __ _   .::'
+ / (~-~-~\\.-' /    \'   \::::. | '_ ` _ \ / _ \_  / | | |/ _` | :::'
+/..\    /..\__/      '     '::: | | | | | | (_) / /| | | | (_| | ::'
+vVVv    vVVv                 ': |_| |_| |_|\___/___|_|_|_|\__,_| ''
+
+Hi there, nice to meet you!
+
+Interested in having a direct impact on hundreds of millions of users? Join
+Mozilla, and become part of a global community thatâ€™s helping to build a
+brighter future for the Web.
+
+Visit https://careers.mozilla.org to learn about our current job openings.
+Visit https://www.mozilla.org/contribute for more ways to get involved and
+help support Mozilla.
+-->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <title>
+  Welcome to Firefox
+</title>
+    <meta name="description" content="
+  Download Mozilla Firefox, a free Web browser. Firefox is created by a global non-profit dedicated to putting individuals in control online. Get Firefox for Windows, macOS, Linux, Android and iOS today!
+">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Mozilla">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://www.mozilla.org/en-US/firefox/">
+    <meta property="og:image" content="https://www.mozilla.org/media/img/firefox/template/page-image.4b108ed0b8d8.png">
+    <meta property="og:title" content="Chart your own course">
+    <meta property="og:description" content="Firefox is non-profit, non-corporate, non-compromised. Choosing Firefox isnâ€™t just choosing a browser. Itâ€™s a vote for personal freedom.">
+    <meta property="fb:page_id" content="14696440021">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:site" content="@firefox">
+    <meta name="twitter:domain" content="mozilla.org">
+    <meta name="twitter:app:name:googleplay" content="Firefox">
+    <meta name="twitter:app:id:googleplay" content="org.mozilla.firefox">
+    <meta name="twitter:app:name:iphone" content="Firefox">
+    <meta name="twitter:app:id:iphone" content="989804926">
+    <meta name="twitter:app:name:ipad" content="Firefox">
+    <meta name="twitter:app:id:ipad" content="989804926">
+    <link rel="apple-touch-icon" type="image/png" sizes="180x180" href="https://www.mozilla.org/media/img/firefox/ios-icon-180.f7c89c6f4a0e.png">
+    <link rel="icon" type="image/png" sizes="196x196" href="https://www.mozilla.org/media/img/firefox/favicon-196.c6d9abffb769.png">
+    <link rel="shortcut icon" href="https://www.mozilla.org/media/img/firefox/favicon.e6bb0e59df3d.ico">
+    <meta name="robots" content="noindex,follow">
+    
+
+    
+
+    <!--[if lte IE 8]>
+      
+      <script src="https://www.mozilla.org/media/js/libs/html5shiv.98460818858d.js"></script>
+
+      
+      <link href="https://www.mozilla.org/media/css/BUNDLES/oldIE.f5fd0794c0f8.css" rel="stylesheet" type="text/css" />
+    <![endif]-->
+
+    <!--[if !lte IE 8]><!-->
+    
+    
+  <link href="https://www.mozilla.org/media/css/BUNDLES/firefox_firstrun.1b1a320ecb53.css" rel="stylesheet" type="text/css" />
+
+
+    
+    
+    <!--<![endif]-->
+
+    
+  
+    <link href="https://www.mozilla.org/media/css/BUNDLES/firefox-update-notification-firstrun-whatsnew.088f1fc278bc.css" rel="stylesheet" type="text/css" />
+  
+
+
+    
+    
+      <!--
+Read more about our custom configuration and use of Google Analytics here:
+https://bugzilla.mozilla.org/show_bug.cgi?id=1122305#c8
+-->
+
+<!-- Google Tag Manager -->
+<!-- Customized for Mozilla.org-->
+<!-- Region Container: NONE -->
+<!-- Rollup Container: System Filtered -->
+<!-- Site Container: NONE -->
+
+
+  <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/gtm-snippet.9f9cf2026c5f.js" charset="utf-8"></script>
+
+<!-- End Google Tag Manager -->
+    
+  </head>
+
+  <body id="firstrun-onboarding" class="html-ltr sky" >
+    <div id="strings"
+      data-global-close="Close"
+      data-global-next="Next"
+      data-global-previous="Previous"
+      data-global-update-firefox="Update your Firefox"
+      data-global-fx-out-of-date-banner-heading="Your Firefox is out-of-date."
+      data-global-fx-out-of-date-banner-message="Get the most recent version to keep browsing securely."
+      data-global-fx-out-of-date-banner-confirm="Update Firefox"
+      ></div>
+
+    
+
+    <div id="outer-wrapper">
+
+    
+    
+
+      <div id="wrapper">
+
+      
+
+      
+        
+      
+
+      
+  <div id="scene">
+    <div class="fxaccounts-container">
+    
+      <div id="left-divider">
+        <h1 id="title">Already using Firefox?</h1>
+        <p>Sign in to your account and weâ€™ll sync the bookmarks, passwords and other great things youâ€™ve saved to Firefox on other devices.</p>
+        
+        
+        <a href="/en-US/firefox/accounts/" target="_blank" rel="noopener noreferrer">Learn more about Firefox Accounts</a>
+      </div>
+      <div id="firefox-logo"></div>
+      
+      
+      <div class="fxaccounts" id="fxa-iframe-config" data-host="https://accounts.firefox.com/" data-mozillaonline-host="https://accounts.firefox.com.cn/">
+        <iframe id="fxa" scrolling="no" data-src="https://accounts.firefox.com/signin?utm_campaign=fxa-embedded-form&amp;utm_medium=referral&amp;utm_source=firstrun&amp;utm_content=fx-52.4.0&amp;entrypoint=firstrun&amp;service=sync&amp;context=iframe&amp;style=chromeless&amp;haltAfterSignIn=true"></iframe>
+        <button id="skip-button">Skip this step</button>
+      </div>
+    
+    </div>
+
+    <div id="scene-images">
+      <img id="night-sky" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/sky.d38a67eb8115.svg">
+      <img id="sky" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/sky.4d21e8fbf508.svg">
+      <img id="sunrise" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/sun.5da77b20428c.svg">
+      <img id="night-mountains" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/mountains_all.410303ec96b6.svg">
+      <img id="mountains" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/mountains-pathway_all.7f3a6e2cb4f4.svg">
+      <img id="night-trees" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/treeline_all.e939db63f35c.svg">
+      <img id="trees" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/treeline-pathway_all.a258d40b1d55.svg">
+      <img id="night-foreground-fox" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/foreground-fox.b1eec3b9001d.svg">
+      <img id="foreground-fox" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/foreground-fox.5372790f879c.svg">
+      <img id="scene-blur" alt="" src="https://www.mozilla.org/media/img/firefox/firstrun-horizon/scene-blur.89f7e2063e44.jpg">
+    </div>
+  </div>
+
+
+      
+
+      </div><!-- close #wrapper -->
+
+      
+      
+
+      
+
+    </div><!-- close #outer-wrapper -->
+
+    <!--[if IE 9]>
+      <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/matchmedia.a6e503dcb8bc.js" charset="utf-8"></script>
+    <![endif]-->
+
+    
+      <!--[if !lte IE 8]><!-->
+        <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/common.b0672d472a56.js" charset="utf-8"></script>
+      <!--<![endif]-->
+
+      <!--[if lte IE 8]>
+        <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/common-ie8.ceacd42893c7.js" charset="utf-8"></script>
+      <![endif]-->
+    
+
+    
+    
+      
+        <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/stub-attribution.157168bbb235.js" charset="utf-8"></script>
+      
+    
+
+    <!--[if !lte IE 8]><!-->
+    
+  <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/firefox_firstrun.70c923bed158.js" charset="utf-8"></script>
+
+
+    
+    
+  
+    <div class="notification-modal-content">
+  <h2>Love this version of Firefox?</h2>
+  <h3>We do too, so weâ€™ve improved to keep you safe from malware. Update now for safer, faster browsing.</h3>
+
+  <p>Easy update instructions:</p>
+
+  <ol class="win-lin">
+    <li>Click the <strong>menu button</strong>, click <strong>help</strong> and select <strong>About Firefox</strong>.</li>
+    <li>The <strong>About Firefox</strong> window will open and Firefox will begin checking for updates and downloading them automatically.</li>
+    <li>When the updates are ready to be installed, click <strong>Restart Firefox to Update</strong>.</li>
+  </ol>
+
+  <ol class="mac">
+    <li>On the menu bar click the <strong>Firefox</strong> menu and select <strong>About Firefox</strong>.</li>
+    <li>The <strong>About Firefox</strong> window will open and Firefox will begin checking for updates and downloading them automatically.</li>
+    <li>When the updates are ready to be installed, click <strong>Restart Firefox to Update</strong>.</li>
+  </ol>
+
+  <small><a href="https://support.mozilla.org/kb/update-firefox-latest-version">More help</a></small>
+</div>
+    <script type="text/javascript" src="https://www.mozilla.org/media/js/BUNDLES/firefox-update-notification-firstrun-whatsnew.464aef571184.js" charset="utf-8"></script>
+  
+
+
+    
+    <!--<![endif]-->
+
+    
+    
+    <img src="https://mozilla.org/set_hsts.gif" class="hidden">
+  </body>
+</html>š(É+…      \‰Ì<\‰Ì?@$„=\‰Î”   7    :https://www.mozilla.org/en-US/firefox/52.4.0/firstrun/ necko:classified 1 strongly-framed 1 security-info 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 request-method GET request-Accept-Encoding gzip, deflate, br response-head HTTP/2.0 200 OK
+Date: Thu, 14 Mar 2019 03:36:29 GMT
+Content-Type: text/html; charset=utf-8
+x-xss-protection: 1; mode=block
+Strict-Transport-Security: max-age=31536000
+x-robots-tag: noodp
+content-security-policy: script-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com 'unsafe-inline' 'unsafe-eval' www.googletagmanager.com www.google-analytics.com tagmanager.google.com www.youtube.com s.ytimg.com; img-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com data: mozilla.org www.googletagmanager.com www.google-analytics.com adservice.google.com adservice.google.de adservice.google.dk creativecommons.org ad.doubleclick.net; default-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com; frame-src www.googletagmanager.com www.google-analytics.com www.youtube-nocookie.com trackertest.org www.surveygizmo.com accounts.firefox.com accounts.firefox.com.cn www.youtube.com; style-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com 'unsafe-inline'; connect-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com www.googletagmanager.com www.google-analytics.com https://accounts.firefox.com/ https://accounts.firefox.com.cn/; child-src www.googletagmanager.com www.google-analytics.com www.youtube-nocookie.com trackertest.org www.surveygizmo.com accounts.firefox.com accounts.firefox.com.cn www.youtube.com
+x-backend-server: bedrock-prod-web-654cb5b94-lff6h.iowa-a
+Expires: Wed, 13 Mar 2019 22:28:57 GMT
+Etag: "75a3f1f625ddbb65305f8be042679783"
+Cache-Control: max-age=600
+x-frame-options: DENY
+X-Content-Type-Options: nosniff
+x-clacks-overhead: GNU Terry Pratchett
+via: 1.1 google
+Alt-Svc: clear
+cf-cache-status: REVALIDATED
+expect-ct: max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+Vary: Accept-Encoding
+Server: cloudflare
+cf-ray: 4b73341d9ddb5a5c-BOS
+X-Firefox-Spdy: h2
+ original-response-headers Date: Thu, 14 Mar 2019 03:36:29 GMT
+Content-Type: text/html; charset=utf-8
+x-xss-protection: 1; mode=block
+Strict-Transport-Security: max-age=31536000
+x-robots-tag: noodp
+content-security-policy: script-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com 'unsafe-inline' 'unsafe-eval' www.googletagmanager.com www.google-analytics.com tagmanager.google.com www.youtube.com s.ytimg.com; img-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com data: mozilla.org www.googletagmanager.com www.google-analytics.com adservice.google.com adservice.google.de adservice.google.dk creativecommons.org ad.doubleclick.net; default-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com; frame-src www.googletagmanager.com www.google-analytics.com www.youtube-nocookie.com trackertest.org www.surveygizmo.com accounts.firefox.com accounts.firefox.com.cn www.youtube.com; style-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com 'unsafe-inline'; connect-src 'self' *.mozilla.net *.mozilla.org *.mozilla.com www.googletagmanager.com www.google-analytics.com https://accounts.firefox.com/ https://accounts.firefox.com.cn/; child-src www.googletagmanager.com www.google-analytics.com www.youtube-nocookie.com trackertest.org www.surveygizmo.com accounts.firefox.com accounts.firefox.com.cn www.youtube.com
+x-backend-server: bedrock-prod-web-654cb5b94-lff6h.iowa-a
+Expires: Wed, 13 Mar 2019 22:28:57 GMT
+Etag: "75a3f1f625ddbb65305f8be042679783"
+Cache-Control: max-age=600
+x-frame-options: DENY
+X-Content-Type-Options: nosniff
+x-clacks-overhead: GNU Terry Pratchett
+via: 1.1 google
+Alt-Svc: clear
+cf-cache-status: REVALIDATED
+expect-ct: max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+Vary: Accept-Encoding
+Server: cloudflare
+cf-ray: 4b73341d9ddb5a5c-BOS
+X-Firefox-Spdy: h2
+ uncompressed-len 0 net-response-time-onstart 303 net-response-time-onstop 304 predictor::resource-count 25 predictor::https://www.mozilla.org/media/js/BUNDLES/site.ec263d31b78e.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/css/BUNDLES/firefox_firstrun.1b1a320ecb53.css 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/css/BUNDLES/firefox-update-notification-firstrun-whatsnew.088f1fc278bc.css 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/js/BUNDLES/gtm-snippet.9f9cf2026c5f.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/sky.d38a67eb8115.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/sky.4d21e8fbf508.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/sun.5da77b20428c.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/mountains_all.410303ec96b6.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/mountains-pathway_all.7f3a6e2cb4f4.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/treeline_all.e939db63f35c.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/treeline-pathway_all.a258d40b1d55.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/night-scene/foreground-fox.b1eec3b9001d.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/day-scene/foreground-fox.5372790f879c.svg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/firstrun-horizon/scene-blur.89f7e2063e44.jpg 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/js/BUNDLES/common.b0672d472a56.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/js/BUNDLES/stub-attribution.157168bbb235.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/js/BUNDLES/firefox_firstrun.70c923bed158.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/js/BUNDLES/firefox-update-notification-firstrun-whatsnew.464aef571184.js 1,1,1552534588,4096 predictor::https://mozilla.org/set_hsts.gif 1,1,1552534588,4096 predictor::https://www.googletagmanager.com/gtm.js?id=GTM-MW3R8V&l=dataLayer 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/fonts/FiraSans-Light.3940026cbaf9.woff2 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/fonts/FiraSans-SemiBold.e04482cc0b3a.woff2 1,1,1552534588,4096 predictor::https://www.google-analytics.com/analytics.js 1,1,1552534588,4096 predictor::https://www.google-analytics.com/plugins/ua/linkid.js 1,1,1552534588,4096 predictor::https://www.mozilla.org/media/img/firefox/template/release-logo-high-res.312908b7dbc4.png 1,1,1552534588,4096   ( 

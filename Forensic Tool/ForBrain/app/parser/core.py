@@ -1,0 +1,1181 @@
+"""Dissect integration layer for forensic artifact parsing.
+
+Wraps the Dissect framework's ``Target`` API to extract Windows forensic
+artifacts from disk images (E01, VMDK, VHD, raw, etc.) and stream them
+into CSV files for downstream AI analysis.
+
+Key responsibilities:
+
+* **Evidence opening** -- :class:`ForensicParser` opens a Dissect
+  ``Target`` in read-only mode from any supported container format.
+* **CSV streaming** -- Records are streamed to CSV one row at a time,
+  never materialised in memory, allowing safe handling of high-volume
+  artifacts such as EVTX and MFT (millions of records).
+* **EVTX splitting** -- Event log records are automatically partitioned
+  by channel/provider into separate CSV files, with additional part files
+  created when a single channel exceeds :data:`EVTX_MAX_RECORDS_PER_FILE`.
+* **Schema evolution** -- When a Dissect plugin yields records with
+  varying schemas, CSV headers are expanded dynamically and the file is
+  rewritten once to ensure a consistent header row.
+* **Upstream patching** -- Importing this module applies the runtime
+  patches in :mod:`app.parser.dissect_patches` for known Dissect bugs
+  whose upstream fixes are not yet released.
+
+Attributes:
+    logger: Module-level logger for parser diagnostics.
+    UNKNOWN_VALUE: Sentinel string used when a target attribute cannot be read.
+    EVTX_MAX_RECORDS_PER_FILE: Maximum rows per EVTX CSV part file.
+    MAX_RECORDS_PER_ARTIFACT: Default cap on rows written for any single
+        artifact. ``0`` means unlimited.
+    PROGRESS_EMIT_INTERVAL_SECONDS: Minimum elapsed seconds between
+        time-based progress emissions for slow, low-record-count artifacts.
+"""
+
+from __future__ import annotations
+
+import csv
+from datetime import date, datetime, time
+from pathlib import Path
+import re
+import sys
+import traceback
+from types import TracebackType
+from time import perf_counter
+import logging
+from typing import Any, Callable, Iterable
+
+from dissect.target import Target
+from dissect.target.exceptions import PluginError, UnsupportedPluginError
+from dissect.target.plugins.os.windows.thumbcache import (
+    IconcacheRecord,
+    IndexRecord,
+    ThumbcacheRecord,
+)
+from dissect.thumbcache import Error as ThumbcacheError, Thumbcache
+
+from .dissect_patches import apply_dissect_patches
+from .registry import get_artifact_registry
+from ..utils.os_utils import normalize_os_type
+
+__all__ = ["ForensicParser", "ParserCancelledError"]
+
+logger = logging.getLogger(__name__)
+
+apply_dissect_patches()
+
+UNKNOWN_VALUE = "Unknown"
+EVTX_MAX_RECORDS_PER_FILE = 500_000
+MAX_RECORDS_PER_ARTIFACT = 0
+PROGRESS_EMIT_INTERVAL_SECONDS = 5.0
+_PREFIXED_THUMBCACHE_FUNCTIONS = {
+    "thumbcache.thumbcache": ("thumbcache", ThumbcacheRecord),
+    "thumbcache.iconcache": ("iconcache", IconcacheRecord),
+}
+
+
+class ParserCancelledError(Exception):
+    """Raised when artifact parsing is cancelled by the caller."""
+
+
+class ForensicParser:
+    """Parse supported forensic artifacts from a Dissect target into CSV files.
+
+    Opens a disk image via Dissect's ``Target.open()``, queries available
+    artifacts, and streams their records to CSV files in the case's parsed
+    directory.  Implements the context manager protocol for deterministic
+    resource cleanup.
+
+    Attributes:
+        evidence_path: Path to the source evidence file.
+        case_dir: Root directory for this forensic case.
+        audit_logger: :class:`~app.logging.audit.AuditLogger` for recording actions.
+        parsed_dir: Directory where output CSV files are written.
+        target: The open Dissect ``Target`` handle.
+    """
+
+    def __init__(
+        self,
+        evidence_path: str | Path,
+        case_dir: str | Path,
+        audit_logger: Any,
+        parsed_dir: str | Path | None = None,
+        max_records_per_artifact: int | None = None,
+    ) -> None:
+        """Initialise the parser and open the Dissect target.
+
+        Args:
+            evidence_path: Path to the disk image or evidence container.
+            case_dir: Case-specific directory for output and audit data.
+            audit_logger: Logger instance for writing audit trail entries.
+            parsed_dir: Optional override for the CSV output directory.
+                Defaults to ``<case_dir>/parsed/``.
+            max_records_per_artifact: Optional per-artifact row cap for
+                parsed CSV output. ``0`` or ``None`` means no configured cap
+                unless the module-level default is patched.
+        """
+        self.evidence_path = Path(evidence_path)
+        self.case_dir = Path(case_dir)
+        self.audit_logger = audit_logger
+        self.parsed_dir = Path(parsed_dir) if parsed_dir is not None else self.case_dir / "parsed"
+        self.parsed_dir.mkdir(parents=True, exist_ok=True)
+        self._max_records_per_artifact = (
+            self._coerce_max_records(max_records_per_artifact)
+            if max_records_per_artifact is not None
+            else None
+        )
+        self.target: Target | None = None
+        self._closed = False
+        self.target = Target.open(self.evidence_path)
+
+        try:
+            self.os_type: str = str(self.target.os).strip().lower()
+        except Exception:
+            self.os_type = "unknown"
+
+    @staticmethod
+    def _coerce_max_records(value: Any) -> int:
+        """Coerce a row-cap value to a non-negative integer."""
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 0
+
+    @property
+    def max_records_per_artifact(self) -> int:
+        """Return the active per-artifact row cap; ``0`` means unlimited."""
+        if self._max_records_per_artifact is not None:
+            return self._max_records_per_artifact
+        return self._coerce_max_records(MAX_RECORDS_PER_ARTIFACT)
+
+    def close(self) -> None:
+        """Close the underlying Dissect target handle."""
+        if self._closed:
+            return
+
+        if self.target is not None:
+            try:
+                close_method = getattr(self.target, "close", None)
+            except Exception:
+                close_method = None
+            if callable(close_method):
+                close_method()
+        self._closed = True
+
+    def __enter__(self) -> ForensicParser:
+        """Enter the runtime context and return the parser instance."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
+        """Exit the runtime context, closing the Dissect target."""
+        del exc_type, exc_val, exc_tb
+        self.close()
+        return False
+
+    def get_image_metadata(self) -> dict[str, str]:
+        """Extract key system metadata from the Dissect target.
+
+        Attempts multiple attribute name variants for each field (e.g.
+        ``hostname``, ``computer_name``, ``name``) to accommodate
+        different OS profiles.
+
+        Returns:
+            Dictionary with keys ``hostname``, ``os_version``, ``domain``,
+            ``ips``, ``timezone``, and ``install_date``.
+        """
+        hostname = str(self._safe_read_target_attribute(("hostname", "computer_name", "name")))
+        os_version = str(self._safe_read_target_attribute(("os_version", "version")))
+        domain = str(self._safe_read_target_attribute(("domain", "dns_domain", "workgroup")))
+        timezone = str(self._safe_read_target_attribute(("timezone", "tz")))
+        install_date = str(self._safe_read_target_attribute(("install_date", "installdate")))
+
+        ips_value = self._safe_read_target_attribute(("ips", "ip_addresses", "ip"))
+        if isinstance(ips_value, (list, tuple, set)):
+            ips = ", ".join(str(value) for value in ips_value if value not in (None, ""))
+            if not ips:
+                ips = UNKNOWN_VALUE
+        else:
+            ips = str(ips_value)
+
+        return {
+            "hostname": hostname,
+            "os_version": os_version,
+            "domain": domain,
+            "ips": ips,
+            "timezone": timezone,
+            "install_date": install_date,
+        }
+
+    def get_available_artifacts(self) -> list[dict[str, Any]]:
+        """Return the artifact registry annotated with availability flags.
+
+        Detects the target OS via ``target.os`` and selects the
+        appropriate artifact registry (Windows or Linux).  Probes the
+        Dissect target for each registered artifact and sets an
+        ``available`` boolean on the returned metadata dictionaries.
+
+        Each descriptor also carries an ``os`` field naming the registry
+        it came from (``"windows"`` or ``"linux"``), so downstream
+        consumers -- in particular the GUI's dynamically created artifact
+        fieldsets -- can apply OS-specific visibility without guessing
+        from context.
+
+        Returns:
+            List of artifact metadata dicts, each augmented with ``key``,
+            ``available``, and ``os`` fields.
+        """
+        registry = get_artifact_registry(self.os_type)
+        registry_os = "linux" if normalize_os_type(self.os_type) == "linux" else "windows"
+        available_artifacts: list[dict[str, Any]] = []
+        for artifact_key, artifact_details in registry.items():
+            function_names = self._artifact_function_names(
+                artifact_details.get("function", artifact_key),
+                artifact_key,
+            )
+            available = False
+            for function_name in function_names:
+                try:
+                    if bool(self.target.has_function(function_name)):
+                        available = True
+                        break
+                except Exception:
+                    logger.warning(
+                        "Probe for artifact function '%s' raised an unexpected error",
+                        function_name,
+                        exc_info=True,
+                    )
+
+            available_artifact = dict(artifact_details)
+            available_artifact["key"] = artifact_key
+            available_artifact["available"] = available
+            available_artifact["os"] = registry_os
+            available_artifacts.append(available_artifact)
+
+        return available_artifacts
+
+    @staticmethod
+    def _artifact_function_names(function_value: Any, artifact_key: str) -> list[str]:
+        """Return one or more Dissect function names for an artifact."""
+        if isinstance(function_value, (list, tuple)):
+            function_names = [str(item).strip() for item in function_value if str(item).strip()]
+        else:
+            function_names = [str(function_value or artifact_key).strip()]
+        return function_names or [artifact_key]
+
+    def _call_target_functions(self, function_names: list[str]) -> Iterable[Any]:
+        """Invoke one or more Dissect functions and yield their records."""
+        if len(function_names) == 1:
+            yield from self._call_target_function(function_names[0])
+            return
+
+        for function_name in function_names:
+            try:
+                records = self._call_target_function(
+                    function_name,
+                    log_resolution_errors=False,
+                )
+            except (AttributeError, UnsupportedPluginError) as error:
+                logger.info(
+                    "Skipping unavailable function '%s' in combined artifact: %s",
+                    function_name,
+                    error,
+                )
+                continue
+            try:
+                yield from records
+            except UnsupportedPluginError as error:
+                logger.info(
+                    "Skipping unavailable function '%s' in combined artifact: %s",
+                    function_name,
+                    error,
+                )
+                continue
+            except Exception:
+                logger.warning(
+                    "Combined artifact function '%s' failed",
+                    function_name,
+                    exc_info=True,
+                )
+                raise
+
+    def _call_target_function(
+        self,
+        function_name: str,
+        log_resolution_errors: bool = True,
+    ) -> Any:
+        """Invoke a Dissect function on the target, including namespaced functions.
+
+        For simple names like ``"shimcache"`` it calls ``target.shimcache()``.
+        For dotted names like ``"browser.history"`` it traverses the namespace
+        chain (``target.browser.history()``) and calls the final attribute.
+        """
+        if function_name in _PREFIXED_THUMBCACHE_FUNCTIONS:
+            get_function = getattr(self.target, "get_function", None)
+            if callable(get_function):
+                return self._call_prefixed_thumbcache_function(function_name)
+
+        if "." not in function_name:
+            function = getattr(self.target, function_name)
+            return function() if callable(function) else function
+
+        current: Any = self.target
+        parts = function_name.split(".")
+        try:
+            for namespace in parts:
+                current = getattr(current, namespace)
+        except (AttributeError, UnsupportedPluginError) as error:
+            if log_resolution_errors:
+                logger.warning(
+                    "Failed to resolve nested function '%s' (stopped at '%s')",
+                    function_name,
+                    namespace,
+                    exc_info=True,
+                )
+            else:
+                logger.debug(
+                    "Nested function '%s' is unavailable (stopped at '%s'): %s",
+                    function_name,
+                    namespace,
+                    error,
+                )
+            raise
+        except Exception:
+            logger.warning(
+                "Failed to resolve nested function '%s' (stopped at '%s')",
+                function_name,
+                namespace,
+                exc_info=True,
+            )
+            raise
+
+        return current() if callable(current) else current
+
+    def _call_prefixed_thumbcache_function(self, function_name: str) -> Iterable[Any]:
+        """Invoke Dissect thumbcache/iconcache parsing with prefix-specific paths.
+
+        Dissect exposes ``thumbcache.thumbcache`` and ``thumbcache.iconcache``
+        from the same plugin and lower-level parser. The plugin-level
+        compatibility check accepts any ``*_idx.db`` file, so a user profile
+        that only has iconcache data can still be visited by the thumbcache
+        export. Calling the lower-level parser only for directories with the
+        requested prefix-specific index avoids partial-parser errors while
+        preserving Dissect's record shape.
+        """
+        if self.target is None:
+            return ()
+
+        prefix, record_type = _PREFIXED_THUMBCACHE_FUNCTIONS[function_name]
+        plugin, _ = self.target.get_function(function_name)
+        return self._iter_prefixed_thumbcache_records(plugin, prefix, record_type)
+
+    def _iter_prefixed_thumbcache_records(
+        self,
+        plugin: Any,
+        prefix: str,
+        record_type: Callable[..., Any],
+    ) -> Iterable[Any]:
+        for cache_path in plugin.get_cache_paths():
+            if not self._cache_path_has_thumbcache_prefix(cache_path, prefix):
+                continue
+
+            try:
+                cache = Thumbcache(cache_path, prefix=prefix)
+                yield from self._create_thumbcache_records(cache, record_type)
+            except ThumbcacheError as error:
+                logger.warning(
+                    "Failed to parse %s cache path %s: %s",
+                    prefix,
+                    cache_path,
+                    error,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to parse %s cache path %s",
+                    prefix,
+                    cache_path,
+                    exc_info=True,
+                )
+
+    def _create_thumbcache_records(
+        self,
+        cache: Thumbcache,
+        record_type: Callable[..., Any],
+    ) -> Iterable[Any]:
+        for path, entry in cache.entries():
+            yield record_type(
+                identifier=entry.identifier,
+                hash=entry.hash,
+                extension=entry.extension,
+                header_checksum=entry.header_checksum,
+                data_checksum=entry.data_checksum,
+                path=path,
+                data_size=len(entry.data),
+                _target=self.target,
+            )
+        for index_entry in cache.index_entries():
+            yield IndexRecord(
+                identifier=index_entry.identifier.hex(),
+                in_use=index_entry.in_use(),
+                flags=index_entry.flags,
+                last_modified=index_entry.last_modified,
+                path=cache.index_file,
+                _target=self.target,
+            )
+
+    @staticmethod
+    def _cache_path_has_thumbcache_prefix(cache_path: Any, prefix: str) -> bool:
+        try:
+            return any(cache_path.glob(f"{prefix}*_idx.db"))
+        except Exception:
+            logger.debug(
+                "Failed to check %s cache path for prefix-specific index files",
+                prefix,
+                exc_info=True,
+            )
+            return False
+
+    def parse_artifact(
+        self,
+        artifact_key: str,
+        progress_callback: Callable[..., None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        """Parse a single artifact and stream its records to one or more CSV files.
+
+        Logs ``parsing_started``, ``parsing_completed`` (or ``parsing_failed``)
+        to the audit trail.  EVTX artifacts are split by channel/provider
+        into separate CSV files.
+
+        Args:
+            artifact_key: Key from the OS-specific artifact registry identifying
+                the artifact to parse.
+            progress_callback: Optional callback invoked with progress
+                information every 1,000 records, at least once every
+                :data:`PROGRESS_EMIT_INTERVAL_SECONDS` seconds while records
+                are streaming, and once on successful completion.
+            cancel_check: Optional callable returning ``True`` when parsing
+                should stop.
+
+        Returns:
+            Result dictionary with keys ``csv_path``, ``record_count``,
+            ``duration_seconds``, ``success``, and ``error``.  EVTX
+            results also include a ``csv_paths`` list.
+
+        Raises:
+            ParserCancelledError: If *cancel_check* requests cancellation.
+        """
+        registry = get_artifact_registry(self.os_type)
+        artifact = registry.get(artifact_key)
+        if artifact is None:
+            return {
+                "csv_path": "",
+                "record_count": 0,
+                "duration_seconds": 0.0,
+                "success": False,
+                "error": f"Unknown artifact key: {artifact_key}",
+            }
+
+        function_names = self._artifact_function_names(
+            artifact.get("function", artifact_key),
+            artifact_key,
+        )
+        function_name = ", ".join(function_names)
+        is_evtx_artifact = len(function_names) == 1 and self._is_evtx_artifact(function_names[0])
+        start_time = perf_counter()
+        record_count = 0
+        csv_path = ""
+
+        self.audit_logger.log(
+            "parsing_started",
+            {
+                "artifact_key": artifact_key,
+                "artifact_name": artifact.get("name", artifact_key),
+                "function": function_name,
+            },
+        )
+
+        created_csv_paths: list[Path] = []
+
+        try:
+            if cancel_check is not None and cancel_check():
+                raise ParserCancelledError("Parsing cancelled by user.")
+            records = self._call_target_functions(function_names)
+            if is_evtx_artifact:
+                all_csv_paths, record_count = self._write_evtx_records(
+                    artifact_key=artifact_key,
+                    records=records,
+                    progress_callback=progress_callback,
+                    created_csv_paths=created_csv_paths,
+                    cancel_check=cancel_check,
+                )
+                if all_csv_paths:
+                    csv_path = str(all_csv_paths[0])
+                else:
+                    empty_output = self.parsed_dir / f"{self._sanitize_filename(artifact_key)}.csv"
+                    empty_output.touch(exist_ok=True)
+                    csv_path = str(empty_output)
+                    all_csv_paths = [empty_output]
+                    created_csv_paths.append(empty_output)
+            else:
+                csv_output = self.parsed_dir / f"{self._sanitize_filename(artifact_key)}.csv"
+                created_csv_paths.append(csv_output)
+                record_count = self._write_records_to_csv(
+                    records=records,
+                    csv_output_path=csv_output,
+                    progress_callback=progress_callback,
+                    artifact_key=artifact_key,
+                    cancel_check=cancel_check,
+                )
+                csv_path = str(csv_output)
+
+            duration = perf_counter() - start_time
+            self.audit_logger.log(
+                "parsing_completed",
+                {
+                    "artifact_key": artifact_key,
+                    "artifact_name": artifact.get("name", artifact_key),
+                    "function": function_name,
+                    "record_count": record_count,
+                    "duration_seconds": round(duration, 6),
+                    "csv_path": csv_path,
+                },
+            )
+
+            result: dict[str, Any] = {
+                "csv_path": csv_path,
+                "record_count": record_count,
+                "duration_seconds": duration,
+                "success": True,
+                "error": None,
+            }
+            if is_evtx_artifact:
+                result["csv_paths"] = [str(p) for p in all_csv_paths]
+            return result
+        except ParserCancelledError:
+            self._cleanup_partial_csv_files(created_csv_paths, artifact_key)
+            try:
+                self.audit_logger.log(
+                    "parsing_cancelled",
+                    {
+                        "artifact_key": artifact_key,
+                        "artifact_name": artifact.get("name", artifact_key),
+                        "function": function_name,
+                        "record_count": record_count,
+                        "duration_seconds": round(perf_counter() - start_time, 6),
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to audit cancellation for artifact '%s'",
+                    artifact_key,
+                    exc_info=True,
+                )
+            raise
+        except UnsupportedPluginError:
+            duration = perf_counter() - start_time
+            self._cleanup_partial_csv_files(created_csv_paths, artifact_key)
+            logger.info(
+                "Artifact '%s' (function '%s') not present in evidence image",
+                artifact_key, function_name,
+            )
+            self.audit_logger.log(
+                "parsing_completed",
+                {
+                    "artifact_key": artifact_key,
+                    "artifact_name": artifact.get("name", artifact_key),
+                    "function": function_name,
+                    "record_count": 0,
+                    "duration_seconds": round(duration, 6),
+                    "message": "Artifact not present in evidence image",
+                },
+            )
+            return {
+                "csv_path": "",
+                "record_count": 0,
+                "duration_seconds": duration,
+                "success": True,
+                "error": "Artifact not present in evidence image",
+            }
+        except Exception as error:
+            duration = perf_counter() - start_time
+            error_message = str(error)
+            error_traceback = traceback.format_exc()
+
+            self._cleanup_partial_csv_files(created_csv_paths, artifact_key)
+
+            self.audit_logger.log(
+                "parsing_failed",
+                {
+                    "artifact_key": artifact_key,
+                    "artifact_name": artifact.get("name", artifact_key),
+                    "function": function_name,
+                    "error": error_message,
+                    "traceback": error_traceback,
+                    "duration_seconds": round(duration, 6),
+                },
+            )
+            return {
+                "csv_path": "",
+                "record_count": record_count,
+                "duration_seconds": duration,
+                "success": False,
+                "error": error_message,
+            }
+
+    def _cleanup_partial_csv_files(
+        self, csv_paths: list[Path], artifact_key: str,
+    ) -> None:
+        """Remove partial CSV files left behind by a failed parse attempt.
+
+        Called from the ``except`` block of :meth:`parse_artifact` to prevent
+        truncated or corrupt CSV files from being picked up by downstream
+        components (analyzer, chat retrieval).
+
+        Args:
+            csv_paths: List of CSV file paths that were created during the
+                failed parse attempt.
+            artifact_key: Artifact key for log messages.
+        """
+        for path in csv_paths:
+            try:
+                if path.exists():
+                    path.unlink()
+                    logger.info(
+                        "Removed partial CSV file '%s' for failed artifact '%s'",
+                        path, artifact_key,
+                    )
+            except OSError:
+                logger.warning(
+                    "Failed to remove partial CSV file '%s' for artifact '%s'",
+                    path, artifact_key,
+                    exc_info=True,
+                )
+
+    def _safe_read_target_attribute(self, attribute_names: tuple[str, ...]) -> Any:
+        """Read a target attribute by trying multiple candidate names.
+
+        Args:
+            attribute_names: Ordered tuple of attribute names to try.
+
+        Returns:
+            The first non-empty value found, or :data:`UNKNOWN_VALUE`.
+        """
+        for attribute_name in attribute_names:
+            try:
+                value = getattr(self.target, attribute_name)
+            except Exception:
+                continue
+
+            if callable(value):
+                try:
+                    value = value()
+                except Exception:
+                    continue
+
+            if value in (None, ""):
+                continue
+
+            return value
+
+        return UNKNOWN_VALUE
+
+    def _write_records_to_csv(
+        self,
+        records: Iterable[Any],
+        csv_output_path: Path,
+        progress_callback: Callable[..., None] | None,
+        artifact_key: str,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> int:
+        """Stream Dissect records to a CSV file, handling dynamic schemas.
+
+        If the record schema expands mid-stream (new columns appear), the
+        file is rewritten at the end with the complete header row via
+        :meth:`_rewrite_csv_with_expanded_headers`.
+
+        Args:
+            records: Iterable of Dissect record objects.
+            csv_output_path: Destination CSV file path.
+            progress_callback: Optional progress callback. Invoked every
+                1,000 records, at least once every
+                :data:`PROGRESS_EMIT_INTERVAL_SECONDS` seconds while records
+                are streaming, and once when the artifact completes.
+            artifact_key: Artifact key for audit/progress reporting.
+
+        Returns:
+            Total number of records written.
+        """
+        record_count = 0
+        max_records = self.max_records_per_artifact
+        fieldnames: list[str] = []
+        fieldnames_set: set[str] = set()
+        headers_expanded = False
+        last_progress_emit = perf_counter()
+
+        with csv_output_path.open("w", newline="", encoding="utf-8") as csv_file:
+            writer: csv.DictWriter | None = None
+            for record in records:
+                if cancel_check is not None and cancel_check():
+                    raise ParserCancelledError("Parsing cancelled by user.")
+                record_dict = self._record_to_dict(record)
+
+                new_keys = [str(k) for k in record_dict.keys() if str(k) not in fieldnames_set]
+                if new_keys:
+                    fieldnames.extend(new_keys)
+                    fieldnames_set.update(new_keys)
+                    if writer is not None:
+                        headers_expanded = True
+                    writer = csv.DictWriter(
+                        csv_file, fieldnames=fieldnames, restval="", extrasaction="ignore",
+                    )
+                    if not headers_expanded:
+                        writer.writeheader()
+
+                row = {
+                    fn: self._stringify_csv_value(record_dict.get(fn))
+                    for fn in fieldnames
+                }
+                if writer is not None:
+                    writer.writerow(row)
+                    record_count += 1
+
+                if max_records > 0 and record_count >= max_records:
+                    self.audit_logger.log(
+                        "parsing_capped",
+                        {
+                            "artifact_key": artifact_key,
+                            "record_count": record_count,
+                            "max_records": max_records,
+                            "message": f"Artifact capped at {max_records:,} rows",
+                        },
+                    )
+                    break
+
+                if progress_callback is not None and (
+                    record_count % 1000 == 0
+                    or perf_counter() - last_progress_emit
+                    >= PROGRESS_EMIT_INTERVAL_SECONDS
+                ):
+                    self._emit_progress(progress_callback, artifact_key, record_count)
+                    last_progress_emit = perf_counter()
+
+        if headers_expanded and record_count > 0:
+            self._rewrite_csv_with_expanded_headers(csv_output_path, fieldnames)
+
+        if progress_callback is not None:
+            self._emit_progress(progress_callback, artifact_key, record_count)
+
+        return record_count
+
+    def _rewrite_csv_with_expanded_headers(self, csv_path: Path, fieldnames: list[str]) -> None:
+        """Rewrite a CSV whose header is incomplete due to mid-stream schema changes.
+
+        Because fieldnames are only ever appended, row values are positionally
+        aligned: shorter rows (written before expansion) just need empty-string
+        padding for the new trailing columns.
+        """
+        temp_path = csv_path.with_suffix(".csv.tmp")
+        num_fields = len(fieldnames)
+        with csv_path.open("r", newline="", encoding="utf-8") as src, \
+             temp_path.open("w", newline="", encoding="utf-8") as dst:
+            reader = csv.reader(src)
+            csv_writer = csv.writer(dst)
+            csv_writer.writerow(fieldnames)
+            next(reader, None)  # skip original (incomplete) header
+            for row in reader:
+                if len(row) < num_fields:
+                    row.extend([""] * (num_fields - len(row)))
+                csv_writer.writerow(row)
+        temp_path.replace(csv_path)
+
+    def _write_evtx_records(
+        self,
+        artifact_key: str,
+        records: Any,
+        progress_callback: Callable[..., None] | None,
+        created_csv_paths: list[Path] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> tuple[list[Path], int]:
+        """Stream EVTX records into per-channel CSV files with automatic splitting.
+
+        Records are grouped by their channel or provider name.  When a
+        single group exceeds :data:`EVTX_MAX_RECORDS_PER_FILE`, a new
+        part file is created.  Rotated parts for the same group share a
+        mutable schema so fields discovered in later parts can be applied
+        to every earlier header during final rewrite.
+
+        Args:
+            artifact_key: Artifact key for filename construction.
+            records: Iterable of Dissect EVTX record objects.
+            progress_callback: Optional progress callback. Invoked every
+                1,000 records, at least once every
+                :data:`PROGRESS_EMIT_INTERVAL_SECONDS` seconds while records
+                are streaming, and once when the artifact completes.
+            created_csv_paths: Optional list that will be populated with
+                paths of CSV files as they are created.  This allows the
+                caller to clean up partial files if the method raises.
+
+        Returns:
+            Tuple of ``(csv_paths, total_record_count)``.
+        """
+        writers: dict[str, dict[str, Any]] = {}
+        # Track all rotated parts per channel so a schema expansion in any
+        # later part rewrites every earlier part with the final channel header.
+        channel_writer_states: dict[str, list[dict[str, Any]]] = {}
+        all_writer_states: list[dict[str, Any]] = []
+        csv_paths: list[Path] = []
+        record_count = 0
+        max_records = self.max_records_per_artifact
+        last_progress_emit = perf_counter()
+
+        try:
+            for record in records:
+                if cancel_check is not None and cancel_check():
+                    raise ParserCancelledError("Parsing cancelled by user.")
+                if max_records > 0 and record_count >= max_records:
+                    self.audit_logger.log(
+                        "parsing_capped",
+                        {
+                            "artifact_key": artifact_key,
+                            "record_count": record_count,
+                            "max_records": max_records,
+                            "message": f"Artifact capped at {max_records:,} rows",
+                        },
+                    )
+                    break
+
+                record_dict = self._record_to_dict(record)
+                group_name = self._extract_evtx_group_name(record_dict)
+
+                writer_state = writers.get(group_name)
+                if writer_state is None:
+                    writer_state = self._open_evtx_writer(artifact_key=artifact_key, group_name=group_name, part=1)
+                    writers[group_name] = writer_state
+                    channel_writer_states.setdefault(group_name, []).append(writer_state)
+                    csv_paths.append(writer_state["path"])
+                    if created_csv_paths is not None:
+                        created_csv_paths.append(writer_state["path"])
+                elif writer_state["records_in_file"] >= EVTX_MAX_RECORDS_PER_FILE:
+                    writer_state["handle"].close()
+                    next_part = int(writer_state["part"]) + 1
+                    # Preserve old state for later header rewrite before replacing.
+                    old_state = writers[group_name]
+                    all_writer_states.append(old_state)
+                    writer_state = self._open_evtx_writer(
+                        artifact_key=artifact_key,
+                        group_name=group_name,
+                        part=next_part,
+                    )
+                    # Share schema containers across rotated parts.  Later
+                    # field discoveries mutate the same objects, letting every
+                    # part for the channel rewrite with identical headers.
+                    if old_state["fieldnames"] is not None:
+                        writer_state["fieldnames"] = old_state["fieldnames"]
+                        writer_state["fieldnames_set"] = old_state["fieldnames_set"]
+                        writer_state["writer"] = csv.DictWriter(
+                            writer_state["handle"],
+                            fieldnames=writer_state["fieldnames"],
+                            extrasaction="ignore",
+                        )
+                        writer_state["writer"].writeheader()
+                    writers[group_name] = writer_state
+                    channel_writer_states.setdefault(group_name, []).append(writer_state)
+                    csv_paths.append(writer_state["path"])
+                    if created_csv_paths is not None:
+                        created_csv_paths.append(writer_state["path"])
+
+                if writer_state["fieldnames"] is None:
+                    fieldnames = [str(key) for key in record_dict.keys()]
+                    writer_state["fieldnames"] = fieldnames
+                    writer_state["fieldnames_set"] = set(fieldnames)
+                    writer_state["writer"] = csv.DictWriter(
+                        writer_state["handle"],
+                        fieldnames=fieldnames,
+                        extrasaction="ignore",
+                    )
+                    writer_state["writer"].writeheader()
+                else:
+                    new_keys = [
+                        str(k) for k in record_dict.keys()
+                        if str(k) not in writer_state["fieldnames_set"]
+                    ]
+                    if new_keys:
+                        writer_state["fieldnames"].extend(new_keys)
+                        writer_state["fieldnames_set"].update(new_keys)
+                        for channel_state in channel_writer_states.get(group_name, ()):
+                            channel_state["headers_expanded"] = True
+                        writer_state["writer"] = csv.DictWriter(
+                            writer_state["handle"],
+                            fieldnames=writer_state["fieldnames"],
+                            extrasaction="ignore",
+                        )
+
+                fieldnames = writer_state["fieldnames"]
+                row = {
+                    fieldname: self._stringify_csv_value(record_dict.get(fieldname))
+                    for fieldname in fieldnames
+                }
+                writer_state["writer"].writerow(row)
+                writer_state["records_in_file"] += 1
+                record_count += 1
+
+                if progress_callback is not None and (
+                    record_count % 1000 == 0
+                    or perf_counter() - last_progress_emit
+                    >= PROGRESS_EMIT_INTERVAL_SECONDS
+                ):
+                    self._emit_progress(progress_callback, artifact_key, record_count)
+                    last_progress_emit = perf_counter()
+        finally:
+            # Detect whether we are unwinding due to an existing exception
+            # so that a header-rewrite failure does not mask the original error.
+            has_pending_exception = sys.exc_info()[1] is not None
+
+            for writer_state in writers.values():
+                writer_state["handle"].close()
+
+            all_writer_states.extend(writers.values())
+            for writer_state in all_writer_states:
+                if writer_state["headers_expanded"] and writer_state["records_in_file"] > 0:
+                    try:
+                        self._rewrite_csv_with_expanded_headers(
+                            writer_state["path"], writer_state["fieldnames"],
+                        )
+                    except Exception:
+                        logger.error(
+                            "Failed to rewrite expanded CSV headers for %s; "
+                            "CSV data columns may exceed header columns, "
+                            "causing silent data loss on read",
+                            writer_state["path"],
+                            exc_info=True,
+                        )
+                        if not has_pending_exception:
+                            raise
+
+        if progress_callback is not None:
+            self._emit_progress(progress_callback, artifact_key, record_count)
+
+        return csv_paths, record_count
+
+    def _open_evtx_writer(self, artifact_key: str, group_name: str, part: int) -> dict[str, Any]:
+        """Open a new CSV file for an EVTX channel group and return writer state.
+
+        Args:
+            artifact_key: Parent artifact key for filename construction.
+            group_name: EVTX channel or provider name.
+            part: 1-based part number for multi-file splits.
+
+        Returns:
+            Dictionary containing ``path``, ``handle``, ``writer``,
+            ``fieldnames``, ``fieldnames_set``, ``headers_expanded``,
+            ``records_in_file``, and ``part``.
+        """
+        artifact_stub = self._sanitize_filename(artifact_key)
+        group_stub = self._sanitize_filename(group_name)
+        filename = f"{artifact_stub}_{group_stub}.csv" if part == 1 else f"{artifact_stub}_{group_stub}_part{part}.csv"
+        output_path = self.parsed_dir / filename
+
+        handle = output_path.open("w", newline="", encoding="utf-8")
+        return {
+            "path": output_path,
+            "handle": handle,
+            "writer": None,
+            "fieldnames": None,
+            "fieldnames_set": None,
+            "headers_expanded": False,
+            "records_in_file": 0,
+            "part": part,
+        }
+
+    def _extract_evtx_group_name(self, record_dict: dict[str, Any]) -> str:
+        """Determine the channel/provider group name for an EVTX record.
+
+        Checks multiple candidate keys (``channel``, ``Channel``,
+        ``provider``, etc.) and returns the first non-empty value.
+
+        Args:
+            record_dict: Dictionary representation of the EVTX record.
+
+        Returns:
+            Channel or provider name, or ``"unknown"`` if none found.
+        """
+        channel = self._find_record_value(
+            record_dict,
+            (
+                "channel",
+                "Channel",
+                "log_name",
+                "LogName",
+                "event_log",
+                "EventLog",
+            ),
+        )
+        provider = self._find_record_value(
+            record_dict,
+            (
+                "provider",
+                "Provider",
+                "provider_name",
+                "ProviderName",
+                "source",
+                "Source",
+            ),
+        )
+
+        if channel:
+            return channel
+        if provider:
+            return provider
+        return "unknown"
+
+    @staticmethod
+    def _record_to_dict(record: Any) -> dict[str, Any]:
+        """Convert a Dissect record to a plain dictionary.
+
+        Handles Dissect ``Record`` objects (via ``_asdict()``), plain
+        dicts, and objects with a ``__dict__``.
+
+        Args:
+            record: A Dissect record or dict-like object.
+
+        Returns:
+            A plain dictionary of field names to values.
+
+        Raises:
+            TypeError: If the record cannot be converted.
+        """
+        if hasattr(record, "_asdict"):
+            as_dict = record._asdict()
+            if as_dict is None:
+                return {}
+            if isinstance(as_dict, dict):
+                return dict(as_dict)
+
+        if isinstance(record, dict):
+            return dict(record)
+
+        if isinstance(record, (list, tuple)):
+            return {f"field_{index}": value for index, value in enumerate(record, start=1)}
+
+        try:
+            return dict(vars(record))
+        except TypeError as exc:
+            raise TypeError("Artifact record cannot be converted to a dictionary.") from exc
+
+    @staticmethod
+    def _stringify_csv_value(value: Any) -> str:
+        """Convert a record field value to a CSV-safe string.
+
+        Handles ``datetime``, ``bytes``, ``None``, and other types that
+        Dissect records may yield.
+
+        Args:
+            value: The raw field value from a Dissect record.
+
+        Returns:
+            String representation suitable for CSV output.
+        """
+        if value is None:
+            return ""
+        if isinstance(value, (datetime, date, time)):
+            return value.isoformat()
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            raw = bytes(value)
+            if len(raw) > 512:
+                return raw[:512].hex() + "..."
+            return raw.hex()
+        return str(value)
+
+    @staticmethod
+    def _find_record_value(record_dict: dict[str, Any], candidate_keys: tuple[str, ...]) -> str:
+        """Return the first non-empty value from *candidate_keys* in *record_dict*.
+
+        Args:
+            record_dict: Dictionary to search.
+            candidate_keys: Ordered tuple of keys to try.
+
+        Returns:
+            The first non-empty string value, or ``""`` if none found.
+        """
+        for key in candidate_keys:
+            if key in record_dict and record_dict[key] not in (None, ""):
+                return str(record_dict[key])
+        return ""
+
+    @staticmethod
+    def _sanitize_filename(value: str) -> str:
+        """Replace non-alphanumeric characters with underscores for safe filenames.
+
+        Args:
+            value: Raw string to sanitise.
+
+        Returns:
+            Filesystem-safe string, or ``"artifact"`` if empty after cleaning.
+        """
+        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")
+        return cleaned or "artifact"
+
+    @staticmethod
+    def _is_evtx_artifact(function_name: str) -> bool:
+        """Return *True* if *function_name* indicates an EVTX artifact."""
+        return function_name == "evtx" or function_name.endswith(".evtx")
+
+    @staticmethod
+    def _emit_progress(
+        progress_callback: Callable[..., None],
+        artifact_key: str,
+        record_count: int,
+    ) -> None:
+        """Invoke the progress callback, tolerating varying signatures.
+
+        Tries ``callback(dict)``, then ``callback(key, count)``, then
+        ``callback(count)`` to accommodate different caller conventions.
+
+        Args:
+            progress_callback: Callable to invoke.
+            artifact_key: Current artifact being parsed.
+            record_count: Number of records processed so far.
+        """
+        payload = {"artifact_key": artifact_key, "record_count": record_count}
+        try:
+            progress_callback(payload)
+            return
+        except TypeError as exc:
+            logger.debug(
+                "progress_callback(dict) failed for %s: %s; trying (key, count)",
+                artifact_key, exc,
+            )
+        except Exception as exc:
+            logger.warning(
+                "progress_callback(dict) raised %s for %s: %s",
+                type(exc).__name__, artifact_key, exc,
+            )
+            return
+
+        try:
+            progress_callback(artifact_key, record_count)  # type: ignore[misc]
+            return
+        except TypeError as exc:
+            logger.debug(
+                "progress_callback(key, count) failed for %s: %s; trying (count)",
+                artifact_key, exc,
+            )
+        except Exception as exc:
+            logger.warning(
+                "progress_callback(key, count) raised %s for %s: %s",
+                type(exc).__name__, artifact_key, exc,
+            )
+            return
+
+        try:
+            progress_callback(record_count)  # type: ignore[misc]
+        except Exception as exc:
+            logger.debug(
+                "All progress_callback signatures failed for %s: %s",
+                artifact_key, exc,
+            )
+            return

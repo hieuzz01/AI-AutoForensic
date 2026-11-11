@@ -1,0 +1,456 @@
+"""Configuration loading and persistence for AIFT.
+
+Manages the application's layered configuration system:
+
+1. **Hardcoded defaults** -- ``DEFAULT_CONFIG`` provides sensible values for
+   every setting so the application runs out of the box.
+2. **YAML file** -- User overrides in ``config/config.yaml`` are deep-merged
+   on top of the defaults.
+3. **Environment variables** -- API keys from ``ANTHROPIC_API_KEY``,
+   ``OPENAI_API_KEY``, and ``MOONSHOT_API_KEY`` / ``KIMI_API_KEY`` take
+   highest precedence.
+
+The :func:`save_config` helper persists the current configuration back to
+YAML so settings changed through the UI are retained across restarts.
+
+Attributes:
+    PROJECT_ROOT: Resolved path to the repository root directory.
+    DEFAULT_CONFIG: Complete default configuration dictionary.
+    LOGO_FILE_CANDIDATES: Ordered tuple of logo filenames to search for in
+        the ``images/`` directory for dark-background UI surfaces.
+    FAVICON_FILE_CANDIDATES: Ordered tuple of icon filenames to search for in
+        the ``images/`` directory for browser tab icons.
+"""
+
+from __future__ import annotations
+
+import logging
+from copy import deepcopy
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+__all__ = [
+    "load_config",
+    "save_config",
+    "get_default_config",
+    "apply_env_overrides",
+    "strip_retired_config_keys",
+    "validate_config",
+    "ConfigurationError",
+    "PROJECT_ROOT",
+    "DEFAULT_CONFIG_RELATIVE_PATH",
+    "DEFAULT_CONFIG",
+    "KNOWN_AI_PROVIDERS",
+    "LOGO_FILE_CANDIDATES",
+    "FAVICON_FILE_CANDIDATES",
+]
+
+logger = logging.getLogger(__name__)
+
+
+class ConfigurationError(Exception):
+    """Raised when the configuration fails validation.
+
+    Attributes:
+        errors: List of human-readable validation error strings.
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = errors
+        joined = "; ".join(errors)
+        super().__init__(f"Invalid configuration: {joined}")
+
+
+KNOWN_AI_PROVIDERS = ("claude", "openai", "kimi", "local")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG_RELATIVE_PATH = Path("config") / "config.yaml"
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "ai": {
+        "provider": "claude",
+        "claude": {
+            "api_key": "",
+            "model": "claude-opus-4-8",
+            "attach_csv_as_file": True,
+            "request_timeout_seconds": 600,
+        },
+        "openai": {
+            "api_key": "",
+            "model": "gpt-5.5",
+            "attach_csv_as_file": True,
+            "request_timeout_seconds": 600,
+        },
+        "kimi": {
+            "api_key": "",
+            "model": "kimi-k2.6",
+            "base_url": "https://api.moonshot.ai/v1",
+            "attach_csv_as_file": True,
+            "request_timeout_seconds": 600,
+        },
+        "local": {
+            "base_url": "http://localhost:11434/v1",
+            "model": "llama3.1:70b",
+            "api_key": "not-needed",
+            "attach_csv_as_file": True,
+            "request_timeout_seconds": 3600,
+        },
+    },
+    "server": {
+        "port": 5000,
+        "host": "127.0.0.1",
+    },
+    "evidence": {
+        "large_file_threshold_mb": 0,
+        "intake_timeout_seconds": 7200,
+    },
+    "automation": {
+        "run_retention_seconds": 86400,
+    },
+    "analysis": {
+        "ai_max_tokens": 128000,
+        "shortened_prompt_cutoff_tokens": 64000,
+        "connection_test_max_tokens": 256,
+        "ai_response_max_tokens": 0,
+        "citation_spot_check_limit": 20,
+        "artifact_csv_row_limit": 0,
+        "artifact_deduplication_enabled": True,
+        "artifact_ai_columns_config_path": "config/artifact_ai_columns.yaml",
+    },
+    # NOTE: artifact profiles are stored as JSON files on disk in profile/
+    # directories, not in this config dict.  No default key is needed here; see
+    # resolve_profiles_root() in app.utils.artifact_profiles.
+}
+
+# Ordered list of logo filenames to look for in the images/ directory.
+# The first match wins; the fallback in routes.py picks any image alphabetically.
+LOGO_FILE_CANDIDATES = (
+    "forbrain-icon.png",
+    "AIFT Logo 2.0 - White.png",
+    "AIFT Logo 2.0.png",
+)
+
+# Ordered list of favicon filenames to look for in the images/ directory.
+# Browser tabs use the dark logo so it remains visible on light tab chrome.
+FAVICON_FILE_CANDIDATES = (
+    "forbrain-icon.png",
+    "AIFT Logo 2.0.png",
+    "AIFT Logo 2.0 - White.png",
+)
+
+
+def _deep_merge_inplace(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge *override* into *base* in-place. Returns *base*.
+
+    Nested dictionaries are merged recursively; all other value types in
+    *override* replace the corresponding entry in *base*.  The caller is
+    responsible for passing a copy of *base* if the original must not be
+    mutated.
+
+    Args:
+        base: The target dictionary that will be updated in-place.
+        override: The dictionary whose values take precedence.
+
+    Returns:
+        The mutated *base* dictionary (returned for convenience).
+    """
+    for key, value in override.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            _deep_merge_inplace(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def get_default_config() -> dict[str, Any]:
+    """Return a deep copy of :data:`DEFAULT_CONFIG` safe for mutation."""
+    return deepcopy(DEFAULT_CONFIG)
+
+
+def _default_config_path() -> Path:
+    """Return the repository default configuration file path."""
+    return PROJECT_ROOT / DEFAULT_CONFIG_RELATIVE_PATH
+
+
+def _ensure_nested_dict(
+    config: dict[str, Any], *keys: str
+) -> dict[str, Any]:
+    """Traverse *config* along *keys*, ensuring each level is a dict.
+
+    If any intermediate value exists but is not a ``dict``, it is
+    replaced with an empty ``dict`` so that subsequent assignments
+    succeed without a ``TypeError``.
+
+    Args:
+        config: The root configuration dictionary.
+        *keys: One or more key names forming a path into *config*
+            (e.g. ``"ai", "claude"``).
+
+    Returns:
+        The innermost ``dict`` at the end of the key path.
+    """
+    current = config
+    for key in keys:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            current[key] = child
+        current = child
+    return current
+
+
+def apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
+    """Overlay API keys from environment variables onto *config*.
+
+    Checks ``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, and
+    ``MOONSHOT_API_KEY`` / ``KIMI_API_KEY``.  Non-empty values replace the
+    corresponding ``api_key`` entries in the configuration dictionary.
+
+    If the YAML file contains a non-dict value for the ``ai`` section or
+    any provider sub-key (e.g. ``claude: null``), the offending value is
+    silently replaced with an empty dict so the env override can proceed.
+
+    Args:
+        config: The configuration dictionary to update in place.
+
+    Returns:
+        The mutated *config* dictionary.
+    """
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    kimi_api_key = os.getenv("MOONSHOT_API_KEY", "").strip() or os.getenv("KIMI_API_KEY", "").strip()
+
+    if anthropic_api_key:
+        _ensure_nested_dict(config, "ai", "claude")["api_key"] = anthropic_api_key
+    if openai_api_key:
+        _ensure_nested_dict(config, "ai", "openai")["api_key"] = openai_api_key
+    if kimi_api_key:
+        _ensure_nested_dict(config, "ai", "kimi")["api_key"] = kimi_api_key
+
+    return config
+
+
+def strip_retired_config_keys(config: dict[str, Any]) -> dict[str, Any]:
+    """Silently drop configuration keys that AIFT no longer supports.
+
+    Currently removes ``evidence.csv_output_dir``, a retired setting that was
+    never read to redirect parser output (parsed CSVs are always written to
+    the case-owned ``images/<image_id>/parsed`` directory).  Stale copies of
+    the key may still exist in older ``config.yaml`` files or be sent by
+    older settings clients; they are ignored without raising a validation
+    error.  The unrelated per-image ``csv_output_dir`` *state* field is not
+    affected.
+
+    Args:
+        config: Configuration (or settings payload) dictionary to clean
+            in place.
+
+    Returns:
+        The mutated *config* dictionary (returned for convenience).
+    """
+    evidence_section = config.get("evidence")
+    if isinstance(evidence_section, dict):
+        evidence_section.pop("csv_output_dir", None)
+    return config
+
+
+def validate_config(config: dict[str, Any]) -> list[str]:
+    """Validate configuration values and return a list of error descriptions.
+
+    Checks that values in the merged configuration are within acceptable
+    ranges and of the correct types.  An empty returned list means the
+    configuration is fully valid.
+
+    Args:
+        config: The fully merged configuration dictionary to validate.
+
+    Returns:
+        A list of human-readable validation error strings.  Empty when
+        the configuration passes all checks.
+    """
+    errors: list[str] = []
+
+    # --- server section ---
+    server = config.get("server", {})
+    if not isinstance(server, dict):
+        errors.append("server: expected a mapping")
+    else:
+        port = server.get("port")
+        if not isinstance(port, int) or not (1 <= port <= 65535):
+            errors.append(
+                f"server.port: must be an integer between 1 and 65535, got {port!r}"
+            )
+
+        host = server.get("host")
+        if not isinstance(host, str) or not host.strip():
+            errors.append(
+                f"server.host: must be a non-empty string, got {host!r}"
+            )
+
+    # --- ai section ---
+    ai = config.get("ai", {})
+    if not isinstance(ai, dict):
+        errors.append("ai: expected a mapping")
+    else:
+        provider = ai.get("provider")
+        if provider not in KNOWN_AI_PROVIDERS:
+            errors.append(
+                f"ai.provider: must be one of {KNOWN_AI_PROVIDERS}, got {provider!r}"
+            )
+
+        for name in KNOWN_AI_PROVIDERS:
+            prov_cfg = ai.get(name)
+            if not isinstance(prov_cfg, dict):
+                continue
+
+            model = prov_cfg.get("model")
+            if not isinstance(model, str) or not model.strip():
+                errors.append(
+                    f"ai.{name}.model: must be a non-empty string, got {model!r}"
+                )
+
+            api_key = prov_cfg.get("api_key")
+            if not isinstance(api_key, str):
+                errors.append(
+                    f"ai.{name}.api_key: must be a string, got {type(api_key).__name__}"
+                )
+
+            base_url = prov_cfg.get("base_url")
+            if base_url is not None:
+                if not isinstance(base_url, str) or not (
+                    base_url.startswith("http://") or base_url.startswith("https://")
+                ):
+                    errors.append(
+                        f"ai.{name}.base_url: must start with http:// or https://, got {base_url!r}"
+                    )
+
+    # --- analysis section ---
+    analysis = config.get("analysis", {})
+    if isinstance(analysis, dict):
+        ai_max_tokens = analysis.get("ai_max_tokens")
+        if not isinstance(ai_max_tokens, int) or ai_max_tokens <= 0:
+            errors.append(
+                f"analysis.ai_max_tokens: must be a positive integer, got {ai_max_tokens!r}"
+            )
+
+        artifact_csv_row_limit = analysis.get("artifact_csv_row_limit")
+        if not isinstance(artifact_csv_row_limit, int) or artifact_csv_row_limit < 0:
+            errors.append(
+                "analysis.artifact_csv_row_limit: must be a non-negative integer "
+                f"(0 = unlimited), got {artifact_csv_row_limit!r}"
+            )
+
+    # --- automation section ---
+    automation = config.get("automation", {})
+    if not isinstance(automation, dict):
+        errors.append("automation: expected a mapping")
+    else:
+        run_retention_seconds = automation.get("run_retention_seconds")
+        if (
+            not isinstance(run_retention_seconds, int)
+            or isinstance(run_retention_seconds, bool)
+            or run_retention_seconds < 60
+        ):
+            errors.append(
+                "automation.run_retention_seconds: must be an integer of at least "
+                f"60 seconds, got {run_retention_seconds!r}"
+            )
+
+    # --- evidence section ---
+    evidence = config.get("evidence", {})
+    if isinstance(evidence, dict):
+        threshold = evidence.get("large_file_threshold_mb")
+        if not isinstance(threshold, (int, float)) or threshold < 0:
+            errors.append(
+                f"evidence.large_file_threshold_mb: must be a non-negative number (0 = unlimited), got {threshold!r}"
+            )
+
+    return errors
+
+
+def load_config(path: str | Path | None = None, use_env_overrides: bool = True) -> dict[str, Any]:
+    """Load the AIFT configuration from a YAML file with layered defaults.
+
+    If the configuration file does not exist, a new file is created from
+    the defaults. Environment variable overrides are applied last unless
+    *use_env_overrides* is ``False``.  Unknown top-level keys and retired
+    keys (see :func:`strip_retired_config_keys`) found in the YAML file are
+    dropped silently so legacy configuration files keep loading.
+
+    Args:
+        path: Explicit path to a YAML configuration file.  Defaults to
+            ``<PROJECT_ROOT>/config/config.yaml``.
+        use_env_overrides: When *True* (default), API keys from environment
+            variables take precedence over file values.
+
+    Returns:
+        The fully merged configuration dictionary.
+
+    Raises:
+        ConfigurationError: If the YAML file contains a non-dictionary root value.
+    """
+    config_path = Path(path) if path is not None else _default_config_path()
+    config = get_default_config()
+
+    if config_path.exists():
+        with config_path.open("r", encoding="utf-8") as file:
+            parsed = yaml.safe_load(file) or {}
+
+        if not isinstance(parsed, dict):
+            raise ConfigurationError([f"Invalid configuration format in {config_path}."])
+
+        _deep_merge_inplace(config, parsed)
+
+        # Strip unknown top-level keys that are not part of the default
+        # schema.  This prevents stale keys (e.g. a ``success`` flag
+        # accidentally written by save_config) from polluting the config.
+        known_keys = set(DEFAULT_CONFIG.keys())
+        for key in list(config.keys()):
+            if key not in known_keys:
+                logger.warning("Ignoring unknown config key: %r", key)
+                del config[key]
+
+        # Drop retired keys that legacy config files may still contain.
+        strip_retired_config_keys(config)
+    else:
+        save_config(config, config_path)
+
+    if use_env_overrides:
+        apply_env_overrides(config)
+
+    errors = validate_config(config)
+    if errors:
+        for error in errors:
+            logger.error("Config validation: %s", error)
+        raise ConfigurationError(errors)
+
+    return config
+
+
+def save_config(config: dict[str, Any], path: str | Path | None = None) -> None:
+    """Persist the configuration dictionary to a YAML file.
+
+    Parent directories are created automatically when they do not exist.
+
+    Args:
+        config: The configuration dictionary to serialise.
+        path: Destination file path.  Defaults to
+            ``<PROJECT_ROOT>/config/config.yaml``.
+    """
+    config_path = Path(path) if path is not None else _default_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_path = config_path.with_suffix(".yaml.tmp")
+    replaced = False
+    try:
+        with tmp_path.open("w", encoding="utf-8") as file:
+            yaml.safe_dump(config, file, sort_keys=False)
+        tmp_path.replace(config_path)
+        replaced = True
+    finally:
+        # Clean up the temp file only if replace() did not succeed.
+        if not replaced and tmp_path.exists():
+            tmp_path.unlink()

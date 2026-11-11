@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTNet AI Forensics - Diagram & Architecture Studio</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --vt-red: #c00000;
+            --vt-dark-red: #991b1b;
+            --vt-dark: #0f172a;
+            --vt-blue: #1e40af;
+            --vt-bg: #f8fafc;
+            --vt-card: #ffffff;
+            --vt-border: #e2e8f0;
+            --vt-text: #1e293b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        body { background: var(--vt-bg); color: var(--vt-text); display: flex; flex-direction: column; min-height: 100vh; }
+        
+        header { background: var(--vt-card); border-bottom: 2px solid var(--vt-border); padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .brand-zone { display: flex; align-items: center; gap: 12px; }
+        .red-bar { width: 6px; height: 38px; background: var(--vt-red); border-radius: 3px; }
+        .title-text h1 { font-size: 19px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; }
+        .title-text p { font-size: 12px; color: #64748b; font-weight: 500; }
+        .logo-tag { font-size: 24px; font-weight: 900; color: var(--vt-red); letter-spacing: 0.5px; }
+
+        .nav-bar { background: #1e293b; padding: 10px 28px; display: flex; gap: 10px; align-items: center; overflow-x: auto; }
+        .tab-btn { background: #334155; color: #cbd5e1; border: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .tab-btn:hover { background: #475569; color: #fff; }
+        .tab-btn.active { background: var(--vt-red); color: #fff; box-shadow: 0 2px 6px rgba(192, 0, 0, 0.4); }
+        
+        .tool-link-group { margin-left: auto; display: flex; gap: 10px; }
+        .tool-link { color: #93c5fd; text-decoration: none; font-size: 12px; display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 4px; background: rgba(255,255,255,0.08); }
+        .tool-link:hover { background: rgba(255,255,255,0.18); text-decoration: underline; }
+
+        .workspace { display: grid; grid-template-columns: 460px 1fr; flex: 1; height: calc(100vh - 120px); overflow: hidden; }
+        
+        .editor-pane { background: #0f172a; color: #e2e8f0; display: flex; flex-direction: column; border-right: 1px solid #334155; }
+        .editor-header { padding: 12px 16px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        .editor-header span { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn-action { background: #2563eb; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .btn-action:hover { background: #1d4ed8; }
+        .btn-copy { background: #475569; margin-right: 6px; }
+        .btn-copy:hover { background: #64748b; }
+        textarea#code-input { flex: 1; background: #0b1120; color: #38bdf8; font-family: "Cascadia Code", "Fira Code", Consolas, monospace; font-size: 12px; line-height: 1.5; padding: 16px; border: none; resize: none; outline: none; }
+
+        .preview-pane { display: flex; flex-direction: column; background: #f8fafc; overflow: hidden; }
+        .preview-header { padding: 12px 20px; background: #ffffff; border-bottom: 1px solid var(--vt-border); display: flex; justify-content: space-between; align-items: center; }
+        .preview-title { font-size: 14px; font-weight: 700; color: #334155; }
+        .zoom-controls { display: flex; gap: 8px; }
+        .zoom-btn { background: #e2e8f0; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .zoom-btn:hover { background: #cbd5e1; }
+        .preview-viewport { flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center; align-items: flex-start; }
+        #diagram-render { width: 100%; display: flex; justify-content: center; }
+        #diagram-render svg { max-width: 100% !important; height: auto !important; box-shadow: 0 4px 16px rgba(0,0,0,0.06); background: #ffffff; border-radius: 8px; padding: 16px; }
+
+        #toast { position: fixed; bottom: 20px; right: 20px; background: #10b981; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-zone">
+            <div class="red-bar"></div>
+            <div class="title-text">
+                <h1>VTNET AI FORENSICS - DIAGRAM & ARCHITECTURE STUDIO</h1>
+                <p>Bộ sơ đồ Kiến trúc Hệ thống, Workflow 5 Phase SANS FOR508 & Techstack toàn diện</p>
+            </div>
+        </div>
+        <div class="logo-tag">VTNet</div>
+    </header>
+
+    <div class="nav-bar">
+        <button class="tab-btn active" onclick="loadDiagram(1)">1. Kiến Trúc 4 Agents & MCP Pool</button>
+        <button class="tab-btn" onclick="loadDiagram(2)">2. Diagram Luồng Workflow Hoạt Động</button>
+        <button class="tab-btn" onclick="loadDiagram(3)">3. Sơ Đồ Mô Hình Hệ Thống 4 Lớp</button>
+        <button class="tab-btn" onclick="loadDiagram(4)">4. Techstack Sản Phẩm VTNet</button>
+        <button class="tab-btn" onclick="loadDiagram(5)">5. Vòng Lặp Điều Tra & VETO Loop</button>
+        
+        <div class="tool-link-group">
+            <a class="tool-link" href="https://mermaid.live/" target="_blank">🌐 Mermaid.live</a>
+            <a class="tool-link" href="https://app.diagrams.net/" target="_blank">🌐 Draw.io</a>
+            <a class="tool-link" href="https://www.planttext.com/" target="_blank">🌐 PlantText</a>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="editor-pane">
+            <div class="editor-header">
+                <span id="editor-lang-tag">MÃ NGUỒN MERMAID</span>
+                <div>
+                    <button class="btn-action btn-copy" onclick="copyCode()">📋 Sao Chép Code</button>
+                    <button class="btn-action" onclick="renderCurrentCode()">⚡ Render Sơ Đồ</button>
+                </div>
+            </div>
+            <textarea id="code-input" spellcheck="false"></textarea>
+        </div>
+
+        <div class="preview-pane">
+            <div class="preview-header">
+                <div class="preview-title" id="preview-title-text">Đang xem: Kiến Trúc 4 Agents & MCP Pool</div>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" onclick="resetZoom()">100%</button>
+                    <button class="zoom-btn" onclick="zoomIn()">➕ Phóng to</button>
+                    <button class="zoom-btn" onclick="zoomOut()">➖ Thu nhỏ</button>
+                </div>
+            </div>
+            <div class="preview-viewport" id="viewport">
+                <div id="diagram-render"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">Đã sao chép mã nguồn vào Clipboard!</div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: false,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        const diagrams = {
+            1: {
+                title: "Kiến Trúc Hệ Thống (Chuẩn form VTNet: 4 Agents + Orchestrator & MCP Pool)",
+                code: `graph TB
+    subgraph CLIENT_OUTPUT["CLIENT & OUTPUT"]
+        INPUT["1 [INPUT] Submit XLSC Ticket<br/><b>Client:</b> SIBI Ticket XLSC · Anomaly alert / Incident request"]
+        OUTPUT["6 [OUTPUT] Forensic Report<br/><b>Deliverables:</b> CEO & SOAR · Executive Action Chart · SOAR playbook"]
+    end
+
+    subgraph ORCHESTRATOR_CONTAINER["ORCHESTRATOR & 4 AGENTS"]
+        direction TB
+        subgraph ORCH["ORCHESTRATOR — LLM Orchestrator / Reasoning Engine"]
+            ORCH1["LLM Nhận & Phân Loại<br/>Dispatch Incident → Agent 01"]
+            ORCH2["LLM Reasoning<br/>TTP Inference ↔ Agent 01"]
+            ORCH3["LLM Planning<br/>Acquisition Strategy ↔ Agent 02"]
+            ORCH4["LLM 5-Why<br/>Reasoning - counter-hypothesis ↔ Agent 03"]
+            ORCH5["LLM Re-evaluate<br/>Counterfact check ↔ Agent 04"]
+        end
+
+        subgraph AGENTS["BỘ 4 AGENTS CHUYÊN BIỆT"]
+            A1["<b>AGENT 01 — Hypothesis</b><br/>• TTP · IOC builder<br/>• Build Hypothesis JSON<br/>• Roots > Websrv > Artifacts<br/><b>⇒ hypothesis JSON</b>"]
+            A2["<b>AGENT 02 — Acquisition</b><br/>• Chain of Custody<br/>• Remote Forensic Acquisition<br/>• Artifact Lineage<br/><b>⇒ evidence</b>"]
+            A3["<b>AGENT 03 — Analysis (MCP)</b><br/>• Findings Report · ThreatAct<br/>• IOC · TrustScore · 5-Why<br/>• Call MCP Server Pool<br/><b>⇒ findings</b>"]
+            A4["<b>AGENT 04 — Adversarial Reviewer</b><br/>• Adversarial Review · VETO<br/>• Max 3 rounds · 50-life loop<br/>• Zero-Hallucination<br/><b>⇒ sign-off</b>"]
+            APPR["<b>BẮT BUỘC PHÊ DUYỆT</b><br/>✓ APPROVED (SIGN-OFF)<br/>Ký duyệt báo cáo → xuất sign-off"]
+        end
+    end
+
+    subgraph MCP_POOL["MCP SERVER POOL"]
+        M1["<b>MCP SIEM</b><br/>Log Correlation"]
+        M2["<b>MCP EDR</b><br/>Endpoint Detection"]
+        M3["<b>MCP Endpoint Server</b><br/>Live Triage"]
+        M4["<b>MCP Eric Zimmerman</b><br/>MFT, Registry, Prefetch"]
+        M5["<b>MCP CLI Forensic</b><br/>Dissect, Volatility, TShark"]
+        M6["<b>MCP Velociraptor</b><br/>Fleet Artifact Hunter"]
+    end
+
+    subgraph SYS_INVESTIGATION["HỆ THỐNG ĐIỀU TRA"]
+        S1[("SIEM")]
+        S2[("EDR")]
+        S3[("Endpoint Server")]
+        S4[("Roots / Websrv / Artifacts")]
+        S5[("SOAR")]
+    end
+
+    subgraph AI_INFRA["HẠ TẦNG AI"]
+        LLM_GW["<b>LLM ORCHESTRATOR</b><br/>(NETMIND LLM GATEWAY)<br/>Reasoning Engine - Suy luận LLM 2 chiều<br/>(Agent ↔ LLM Orchestrator)"]
+    end
+
+    %% Flows
+    INPUT --> ORCH1
+    ORCH1 --> A1
+    A1 -->|hypothesis JSON| A2
+    A2 -->|evidence| A3
+    A3 -->|findings| A4
+    A4 -->|Sign-off OK| APPR
+    APPR --> OUTPUT
+
+    %% VETO Loop
+    A4 -.->|VETO loop (max 3 rounds)| A1
+    A4 -.->|VETO loop| A3
+
+    %% Tool connections
+    A3 <===> M1
+    A3 <===> M2
+    A3 <===> M3
+    A3 <===> M4
+    A3 <===> M5
+    A3 <===> M6
+
+    %% Systems
+    M1 --- S1
+    M2 --- S2
+    M3 --- S3
+    M4 --- S4
+    M6 --- S4
+
+    ORCH <===> LLM_GW
+
+    classDef redBox fill:#fee2e2,stroke:#c00000,stroke-width:2px,color:#991b1b;
+    classDef blueBox fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef yellowBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e;
+    classDef greenBox fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#065f46;
+    classDef darkBox fill:#f1f5f9,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+
+    class INPUT,OUTPUT redBox;
+    class A1,A2,A3,ORCH1,ORCH2,ORCH3,ORCH4,ORCH5,LLM_GW blueBox;
+    class A4 yellowBox;
+    class APPR greenBox;
+    class M1,M2,M3,M4,M5,M6,S1,S2,S3,S4,S5 darkBox;`
+            },
+            2: {
+                title: "Diagram Luồng Workflow Hoạt Động (5 Phase SANS FOR508 & VETO)",
+                code: `flowchart LR
+    subgraph P1["PHASE 1: TIẾP NHẬN & TRIAGE"]
+        direction TB
+        P1_A["Tiếp nhận Ticket sự cố / Bằng chứng (.ad1, .raw, .pcap, .dmp)"]
+        P1_B["Thẩm định tính toàn vẹn Chain of Custody: Băm MD5, SHA-1, SHA-256 (ISO 27037)"]
+        P1_C["Triage định dạng file & kiến trúc hệ thống mục tiêu"]
+        P1_A --> P1_B --> P1_C
+    end
+
+    subgraph P2["PHASE 2: LẬP GIẢ THUYẾT (TTP)"]
+        direction TB
+        P2_A["Agent 01 đọc mô tả sự cố & IOC ban đầu"]
+        P2_B["Ánh xạ chiến thuật MITRE ATT&CK (Initial Access, Execution, Persistence, C2)"]
+        P2_C["Dựng cây giả thuyết điều tra (Build Hypothesis JSON)"]
+        P2_A --> P2_B --> P2_C
+    end
+
+    subgraph P3["PHASE 3: BÓC TÁCH CONTAINER"]
+        direction TB
+        P3_A["Agent 02 chạy ad1_extract hoặc Dissect giải mã container logic"]
+        P3_B["Bóc tách Master File Table ($MFT), Registry Hives, Event Logs"]
+        P3_C["Phân tách artifact bộ nhớ RAM và luồng gói tin PCAP"]
+        P3_A --> P3_B --> P3_C
+    end
+
+    subgraph P4["PHASE 4: PHÂN TÍCH CHUYÊN SÂU (MCP)"]
+        direction TB
+        P4_A["Agent 03 điều phối gọi 4 FastMCP Servers:"]
+        P4_B["• Volatility 3: RAM pslist, pstree, malfind<br/>• Eric Zimmerman: Amcache SHA1, Prefetch, MFT<br/>• TShark: DNS Tunneling, TLS SNI"]
+        P4_C["Bắn Live Telemetry Webhook thời gian thực sang ForBrain (:5000)"]
+        P4_A --> P4_B --> P4_C
+    end
+
+    subgraph P5["PHASE 5: VETO & SIGN-OFF"]
+        direction TB
+        P5_A["Agent 04 thẩm định đối kháng: Đối soát chéo từng kết luận với bằng chứng số thô"]
+        P5_B{"Chứng cứ nhị phân thô<br/>có chứng minh 100%?"}
+        P5_C["APPROVED SIGN-OFF: Ký duyệt báo cáo"]
+        P5_D["Xuất SANS DOCX/PDF, Master Timeline CSV & STIX 2.1 IOCs"]
+        P5_A --> P5_B
+        P5_B -->|Hợp lệ 100%| P5_C --> P5_D
+    end
+
+    %% Workflow Sequential Connectors
+    P1 -->|Bàn giao chứng cứ toàn vẹn| P2
+    P2 -->|Hypothesis JSON| P3
+    P3 -->|Evidence Artifacts| P4
+    P4 -->|Findings Report| P5
+
+    %% VETO Loop
+    P5_B -.->|VETO LOOP (Max 3 rounds: Bác bỏ suy diễn ảo giác)| P2
+    P5_B -.->|Yêu cầu đào sâu chứng cứ bổ sung| P4
+
+    classDef redHeader fill:#fee2e2,stroke:#c00000,stroke-width:2px,color:#991b1b;
+    classDef blueCard fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a;
+    classDef greenCard fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#065f46;
+    classDef yellowCard fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+
+    class P1_A,P2_A,P3_A,P4_A blueCard;
+    class P5_B yellowCard;
+    class P5_C,P5_D greenCard;`
+            },
+            3: {
+                title: "Sơ Đồ Mô Hình Của Hệ Thống AI Forensic (4 Lớp Kiến Trúc)",
+                code: `graph TB
+    subgraph LAYER1["LỚP 1: GIAO DIỆN & GIÁM SÁT (UI & OBSERVABILITY)"]
+        UI_STUDIO["<b>V-AutoFor AI Studio (Port 8787)</b><br/>Giao diện đối thoại điều tra, nạp prompt, xem báo cáo"]
+        UI_MONITOR["<b>ForBrain Observability (Port 5000)</b><br/>Tool Registry Status, Live AI Execution Feed, Inspect Raw Output"]
+        UI_ROUTER["<b>9Router Admin Portal (Port 20128)</b><br/>Quản lý tập trung API Key, rate-limit, cân bằng tải"]
+    end
+
+    subgraph LAYER2["LỚP 2: ĐIỀU PHỐI & SUY LUẬN AI (REASONING & MULTI-AGENT)"]
+        CORE_ORCH["<b>Reasonix Orchestrator Core</b><br/>State Machine, Quản lý Session, Zero-Hallucination Guardrails"]
+        AGENTS_POOL["<b>Bộ 4 Chuyên Gia Số (4 Agents)</b><br/>• Agent 01: Hypothesis & MITRE TTP<br/>• Agent 02: Acquisition & ad1_extract<br/>• Agent 03: Deep Analysis FastMCP<br/>• Agent 04: Adversarial Reviewer & VETO"]
+        SKILL_BASE["<b>Kho Tri Thức Chiến Thuật (SKILL.md)</b><br/>Quy chuẩn SANS FOR508, ISO/IEC 27037, cấm chạy PowerShell"]
+    end
+
+    subgraph LAYER3["LỚP 3: CẦU NỐI CHUẨN HÓA FASTMCP (FASTMCP PROTOCOL BRIDGE)"]
+        MCP_1["<b>aift_mcp.py</b><br/>Dissect Core Engine, phân tích đĩa"]
+        MCP_2["<b>eztools_mcp.py</b><br/>Eric Zimmerman, PE, Linux Logs"]
+        MCP_3["<b>sysinternals_mcp.py</b><br/>Autoruns, Sigcheck, Handles"]
+        MCP_4["<b>network_memory_mcp.py</b><br/>Volatility 3, TShark, ad1_extract"]
+        TEL_STREAM["<b>Live Telemetry Streamer</b><br/>Bắn Webhook HTTP POST (/api/telemetry) về Port 5000"]
+    end
+
+    subgraph LAYER4["LỚP 4: BỘ NHỊ PHÂN THỰC THI & KHO BẰNG CHỨNG (ENGINES & STORAGE)"]
+        BIN_ENGINES["<b>Bộ Nhị Phân Forensic Chuyên Dụng</b><br/>• Volatility 3 (2.28.2) & MemProcFS<br/>• Wireshark TShark (4.0.6)<br/>• Eric Zimmerman Suite (.NET 9)<br/>• Microsoft Sysinternals 64-bit<br/>• Dissect Python Engine & pefile"]
+        EVIDENCE_STORE[("<b>Kho Bằng Chứng Số Trung Tâm (Ổ E:)</b><br/>• FTK Logical Containers (.ad1, .txt)<br/>• Raw/DD, E01, VMDK Images<br/>• Memory RAM Dumps (.raw, .dmp)<br/>• Network Captures (.pcap, .pcapng)<br/>• Thư mục giải nén extracted/")]
+    end
+
+    %% Inter-layer connections
+    UI_STUDIO <===> CORE_ORCH
+    UI_ROUTER <===> CORE_ORCH
+    CORE_ORCH --- AGENTS_POOL
+    AGENTS_POOL --- SKILL_BASE
+
+    AGENTS_POOL ===>|stdio JSON-RPC IPC| MCP_1
+    AGENTS_POOL ===>|stdio JSON-RPC IPC| MCP_2
+    AGENTS_POOL ===>|stdio JSON-RPC IPC| MCP_3
+    AGENTS_POOL ===>|stdio JSON-RPC IPC| MCP_4
+
+    MCP_1 -.->|Webhook| TEL_STREAM
+    MCP_2 -.->|Webhook| TEL_STREAM
+    MCP_3 -.->|Webhook| TEL_STREAM
+    MCP_4 -.->|Webhook| TEL_STREAM
+    TEL_STREAM ===> UI_MONITOR
+
+    MCP_1 ===> BIN_ENGINES
+    MCP_2 ===> BIN_ENGINES
+    MCP_3 ===> BIN_ENGINES
+    MCP_4 ===> BIN_ENGINES
+    BIN_ENGINES ===> EVIDENCE_STORE
+
+    classDef blueCard fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a;
+    classDef redCard fill:#fee2e2,stroke:#c00000,stroke-width:1.5px,color:#991b1b;
+    classDef darkCard fill:#f1f5f9,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef storageCard fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
+
+    class UI_STUDIO,UI_MONITOR,UI_ROUTER,CORE_ORCH,AGENTS_POOL,SKILL_BASE blueCard;
+    class MCP_1,MCP_2,MCP_3,MCP_4,TEL_STREAM redCard;
+    class BIN_ENGINES darkCard;
+    class EVIDENCE_STORE storageCard;`
+            },
+            4: {
+                title: "Techstack Sản Phẩm AI Forensic VTNet (5 Cột Công Nghệ)",
+                code: `graph TB
+    subgraph T1["1. AI CORE & MULTI-AGENT"]
+        T1_A["• Multi-Agent: Reasonix Engine (Python/Node)<br/>• Models: Qwen-2.5-Coder, DeepSeek-R1<br/>• Gateway: NetMind / 9Router Gateway (:20128)<br/>• Context: 128K–1M token, Structured Output<br/>• Guardrails: VETO Loop Zero-Hallucination"]
+    end
+
+    subgraph T2["2. FORENSIC ENGINES"]
+        T2_A["• Memory: Volatility 3 (2.28.2), MemProcFS<br/>• Disk: Dissect (2024.8), ad1_extract<br/>• Windows: Zimmerman Suite (.NET 9)<br/>• Malware: pefile, Sigcheck, Autoruns<br/>• Network: Wireshark TShark (4.0.6)"]
+    end
+
+    subgraph T3["3. PROTOCOLS & APIS"]
+        T3_A["• Tool Protocol: FastMCP stdio JSON-RPC<br/>• Live Telemetry: Async HTTP Webhook POST<br/>• AI API: OpenAI-compatible RESTful (v1)<br/>• Streaming: Server-Sent Events (SSE)<br/>• Formats: STIX 2.1, Yara, Parquet, SQLite"]
+    end
+
+    subgraph T4["4. FRONTEND & OBSERVABILITY"]
+        T4_A["• Web Framework: Flask 3.0 / Starlette<br/>• Styling: Dark Neumorphism, Tailwind CSS<br/>• Graphs: D3.js Process Tree, Mermaid.js<br/>• Realtime: Tool Registry, Live AI Feed<br/>• Reporting: python-docx, WeasyPrint PDF"]
+    end
+
+    subgraph T5["5. HẠ TẦNG & BẢO MẬT"]
+        T5_A["• Deployment: 100% On-Premise Air-Gapped<br/>• Chain of Custody: MD5, SHA-1, SHA-256<br/>• Inputs: AD1, E01, RAW, DMP, PCAP, EVTX<br/>• Runtime: Python 3.10+, Node LTS, .NET 9<br/>• Security: Dữ liệu không ra Internet"]
+    end
+
+    classDef col1 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef col2 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef col3 fill:#fee2e2,stroke:#c00000,stroke-width:2px,color:#991b1b;
+    classDef col4 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef col5 fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#065f46;
+
+    class T1_A col1;
+    class T2_A col2;
+    class T3_A col3;
+    class T4_A col4;
+    class T5_A col5;`
+            },
+            5: {
+                title: "Vòng Lặp Chạy Forensic & Cơ Chế Kiểm Tra VETO (Sequence Diagram)",
+                code: `sequenceDiagram
+    autonumber
+    actor Analyst as Chuyên Viên Giám Định
+    participant Orch as Reasonix Orchestrator (:8787)
+    participant A1 as Agent 01 (Hypothesis)
+    participant A2 as Agent 02 (Acquisition)
+    participant A3 as Agent 03 (Analysis MCP)
+    participant MCP as MCP Tool Pool (Dissect/Volat/TShark)
+    participant Mon as ForBrain Monitor (:5000)
+    participant A4 as Agent 04 (Reviewer & VETO)
+
+    Analyst->>Orch: Nhập lệnh Prompt & Đường dẫn bằng chứng (.ad1, .dmp)
+    Orch->>A1: Kích hoạt Agent 01: Phân rã mục tiêu & Giả thuyết TTP
+    A1-->>Orch: Trả về Hypothesis JSON (MITRE ATT&CK T1059, T1055, T1071)
+    
+    Orch->>A2: Kích hoạt Agent 02: Bóc tách chứng cứ & Tính hash SHA256
+    A2->>MCP: Gọi ad1_extract hoặc Dissect mount container
+    MCP-->>A2: Bàn giao cây thư mục đĩa logic & bảng hash bảo toàn
+    A2-->>Orch: Xác nhận Evidence verified & Chain of Custody
+
+    loop VÒNG LẶP ĐIỀU TRA & ĐỐI KHÁNG VETO (Tối đa 3 vòng)
+        Orch->>A3: Phân nhiệm vụ điều tra chuyên sâu cho Agent 03
+        A3->>MCP: Gọi Tool tương ứng (Volatility pslist, malfind / Dissect target / TShark)
+        par Live Telemetry Stream
+            MCP-->>Mon: Bắn Webhook HTTP POST /api/telemetry (Status: Online, Tool, Args)
+            Mon-->>Analyst: Cập nhật thẻ Live Feed (Xanh/Đỏ) trên giao diện Web :5000
+        end
+        MCP-->>A3: Trả về kết quả thực thi nhị phân thô (stdout/JSON)
+        A3-->>Orch: Lập Findings Report (ThreatAct, IOC, 5-Why Root Cause)
+        
+        Orch->>A4: Chuyển toàn bộ Findings cho Agent 04 thẩm định đối kháng
+        alt Có kết luận suy diễn KHÔNG có chứng cứ nhị phân gốc
+            A4-->>Orch: KÍCH HOẠT VETO LOOP (Bác bỏ giả thuyết / Yêu cầu truy vấn lại)
+            Orch->>A1: Cập nhật lại giả thuyết và sinh câu hỏi điều tra mới
+        else Mọi phát hiện 100% khớp với bằng chứng số thô
+            A4-->>Orch: KÝ DUYỆT BẮT BUỘC (APPROVED SIGN-OFF)
+        end
+    end
+
+    Orch->>Analyst: Trả về Báo Cáo Giám Định (SANS DOCX), Master Timeline & STIX IOCs`
+            }
+        };
+
+        let currentTab = 1;
+        let zoomLevel = 1.0;
+
+        function loadDiagram(id) {
+            currentTab = id;
+            document.querySelectorAll('.tab-btn').forEach((b, idx) => {
+                b.classList.toggle('active', (idx + 1) === id);
+            });
+            document.getElementById('code-input').value = diagrams[id].code;
+            document.getElementById('preview-title-text').innerText = "Đang xem: " + diagrams[id].title;
+            renderCurrentCode();
+        }
+
+        async function renderCurrentCode() {
+            const code = document.getElementById('code-input').value;
+            const container = document.getElementById('diagram-render');
+            container.innerHTML = '<div style="color:#64748b; font-size:14px; margin-top:40px;">Đang render sơ đồ...</div>';
+            
+            try {
+                const id = 'mermaid-svg-' + Date.now();
+                const { svg } = await mermaid.render(id, code);
+                container.innerHTML = svg;
+                applyZoom();
+            } catch (err) {
+                container.innerHTML = '<div style="color:#dc2626; background:#fee2e2; padding:16px; border-radius:6px; font-family:monospace; font-size:12px; white-space:pre-wrap;">' + err.message + '</div>';
+            }
+        }
+
+        function copyCode() {
+            const code = document.getElementById('code-input').value;
+            navigator.clipboard.writeText(code).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                setTimeout(() => { toast.style.display = 'none'; }, 2200);
+            });
+        }
+
+        function zoomIn() { zoomLevel = Math.min(zoomLevel + 0.15, 2.5); applyZoom(); }
+        function zoomOut() { zoomLevel = Math.max(zoomLevel - 0.15, 0.4); applyZoom(); }
+        function resetZoom() { zoomLevel = 1.0; applyZoom(); }
+        function applyZoom() {
+            const svg = document.querySelector('#diagram-render svg');
+            if (svg) {
+                svg.style.transform = `scale(${zoomLevel})`;
+                svg.style.transformOrigin = 'top center';
+                svg.style.transition = 'transform 0.2s ease-out';
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadDiagram(1);
+        });
+    </script>
+</body>
+</html>

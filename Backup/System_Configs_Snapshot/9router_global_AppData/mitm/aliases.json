@@ -1,0 +1,15 @@
+{
+  "antigravity": {
+    "gpt-oss-120b-medium": "groq/openai/gpt-oss-120b",
+    "claude-opus-4-6-thinking": "groq/llama-3.3-70b-versatile",
+    "claude-sonnet-4-6": "groq/meta-llama/llama-4-maverick-17b-128e-instruct",
+    "claude-opus-5-5-high": "groq/qwen/qwen3-32b",
+    "claude-opus-5-5-medium": "glm/glm-4.6v",
+    "claude-opus-5-5-low": "glm/glm-4.7",
+    "claude-opus-5-5": "glm/glm-5",
+    "claude-sonnet-5-5-high": "glm/glm-5.3-flash",
+    "claude-sonnet-5-5-medium": "glm/glm-5-turbo",
+    "claude-sonnet-5-5-low": "glm/glm-5.2",
+    "claude-sonnet-5-5": "glm/glm-5.3"
+  }
+}

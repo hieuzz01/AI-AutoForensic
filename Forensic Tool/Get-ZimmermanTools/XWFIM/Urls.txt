@@ -1,0 +1,8 @@
+#This file must be in this exact format. do not change spacing or anything. You can change the URLs as needed
+#but do not add spaces around = or change the name on the left side of the =
+manual=https://www.x-ways.net/winhex/manual.pdf
+viewer=https://www.x-ways.net/res/viewer/xw_viewer.zip
+mplayer32=https://www.x-ways.net/res/mplayer/history/MPlayer%202018%20x86.zip
+mplayer64=https://www.x-ways.net/res/mplayer/MPlayer%202025%20x64.zip
+tesseract=https://www.x-ways.net/res/Tesseract.zip
+excire=https://www.x-ways.net/res/Excire.zip

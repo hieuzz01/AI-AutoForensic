@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""AIFT CLI — Command-line interface for automated forensic triage.
+
+Provides a standalone command-line tool that runs the full AIFT forensic
+analysis pipeline without starting the Flask web server. Evidence files
+or folders are processed, artifacts are parsed, AI analysis is performed,
+and both HTML and JSON reports are generated.
+
+Usage:
+    python aift_cli.py -e /path/to/evidence -p "Investigate suspicious activity"
+    python aift_cli.py -e /evidence/folder -p @prompt.txt -o /output --profile recommended
+
+Attributes:
+    EXIT_SUCCESS: Exit code for successful completion (0).
+    EXIT_FAILURE: Exit code for fatal errors (1).
+    EXIT_PARTIAL: Exit code for partial success with warnings (2).
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+from typing import Any
+
+from runtime_compat import UnsupportedPythonVersionError, assert_supported_python_version
+
+EXIT_SUCCESS = 0
+EXIT_FAILURE = 1
+EXIT_PARTIAL = 2
+
+AIFT_LOGO = """       d8888 8888888 8888888888 88888888888
+      d88888   888   888            888
+     d88P888   888   888            888
+    d88P 888   888   8888888        888
+   d88P  888   888   888            888
+  d88P   888   888   888            888
+ d8888888888   888   888            888
+d88P     888 8888888 888            888
+
+╭─╮╷   ╭─╴╭─╮╭─╮╭─╴╭╮╷╭─╮╷╭─╴   ╶┬╴╭─╮╷╭─╮╭─╴╭─╴
+├─┤│   ├╴ │ │├┬╯├╴ │╰┤╰─╮││      │ ├┬╯│├─┤│╶╮├╴
+╵ ╵╵   ╵  ╰─╯╵╰╴╰─╴╵ ╵╰─╯╵╰─╴    ╵ ╵╰╴╵╵ ╵╰─╯╰─╴"""
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for the AIFT CLI.
+
+    Returns:
+        Configured ``argparse.ArgumentParser`` instance.
+    """
+    parser = argparse.ArgumentParser(
+        prog="aift_cli.py",
+        description="AIFT - AI Forensic Triage (CLI Mode)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    required = parser.add_argument_group("required arguments")
+    required.add_argument(
+        "-e", "--evidence",
+        required=True,
+        metavar="EVIDENCE",
+        help=(
+            "Path to evidence file or folder. If a folder is given, all "
+            "supported evidence files within it will be discovered and processed."
+        ),
+    )
+    required.add_argument(
+        "-p", "--prompt",
+        required=True,
+        metavar="PROMPT",
+        help=(
+            "Investigation context / prompt for AI analysis. Can be a string "
+            "or a path to a text file (prefix with @, e.g., @prompt.txt)."
+        ),
+    )
+
+    optional = parser.add_argument_group("optional arguments")
+    optional.add_argument(
+        "-o", "--output",
+        metavar="OUTPUT",
+        default=None,
+        help=(
+            "Output directory for reports. If omitted, reports are written to "
+            "the created case folder under cases/<case_id>/reports."
+        ),
+    )
+    optional.add_argument(
+        "--profile",
+        metavar="PROFILE",
+        default="recommended",
+        help=(
+            'Artifact profile name or JSON file path. Defaults to "recommended". '
+            "Use --list-profiles to see available profiles."
+        ),
+    )
+    optional.add_argument(
+        "-c", "--config",
+        metavar="CONFIG",
+        default=None,
+        help=(
+            "Path to a YAML config file. Defaults to config/config.yaml "
+            "in the AIFT installation directory."
+        ),
+    )
+    optional.add_argument(
+        "--case-name",
+        metavar="NAME",
+        default=None,
+        help="Human-readable case name. Auto-generated if not provided.",
+    )
+    optional.add_argument(
+        "--skip-hashing",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Skip SHA-256/MD5 hash computation on evidence "
+            "(--no-skip-hashing forces hashing). When neither flag is given, "
+            "the config's evidence.compute_hashes setting decides; hashing "
+            "stays enabled unless that key is set to false."
+        ),
+    )
+    optional.add_argument(
+        "--date-start",
+        metavar="DATE",
+        default=None,
+        help="Start date for analysis filtering (YYYY-MM-DD).",
+    )
+    optional.add_argument(
+        "--date-end",
+        metavar="DATE",
+        default=None,
+        help="End date for analysis filtering (YYYY-MM-DD).",
+    )
+    optional.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress progress output. Only print final result.",
+    )
+    optional.add_argument(
+        "--no-logo",
+        action="store_true",
+        default=False,
+        help="Skip the startup logo and print only the AIFT version line.",
+    )
+    optional.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Enable debug-level logging.",
+    )
+    optional.add_argument(
+        "--list-profiles",
+        action="store_true",
+        default=False,
+        help="List available artifact profiles and exit.",
+    )
+    optional.add_argument(
+        "--version",
+        action="store_true",
+        default=False,
+        help="Show version and exit.",
+    )
+
+    return parser
+
+
+def _resolve_prompt(raw_prompt: str) -> str:
+    """Resolve the prompt argument, loading from file if prefixed with ``@``.
+
+    Args:
+        raw_prompt: The raw ``--prompt`` value from the CLI.
+
+    Returns:
+        The investigation prompt string.
+
+    Raises:
+        SystemExit: If the prompt file does not exist or cannot be read.
+    """
+    if raw_prompt.startswith("@"):
+        file_path = Path(raw_prompt[1:]).expanduser().resolve()
+        if not file_path.is_file():
+            print(f"ERROR: Prompt file not found: {file_path}", file=sys.stderr)
+            raise SystemExit(EXIT_FAILURE)
+        try:
+            return file_path.read_text(encoding="utf-8").strip()
+        except Exception as exc:
+            print(f"ERROR: Failed to read prompt file: {exc}", file=sys.stderr)
+            raise SystemExit(EXIT_FAILURE) from None
+    return raw_prompt
+
+
+def _format_duration(seconds: float) -> str:
+    """Format a duration in seconds as a human-readable string.
+
+    Args:
+        seconds: Duration in seconds.
+
+    Returns:
+        Formatted string like ``"2m 05s"`` or ``"45s"``.
+    """
+    minutes = int(seconds) // 60
+    secs = int(seconds) % 60
+    if minutes > 0:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+def _format_startup_line() -> str:
+    """Return the one-line CLI startup label with centralized version metadata."""
+    from app.utils.version import TOOL_VERSION
+
+    return f"AIFT {TOOL_VERSION} - By Flip Forensics"
+
+
+def _prepare_stdout_for_text(text: str) -> None:
+    """Allow Unicode banner text to be printed on legacy Windows code pages."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        text.encode(encoding)
+    except UnicodeEncodeError:
+        reconfigure = getattr(sys.stdout, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8")
+
+
+def _print_startup_banner(include_logo: bool = True) -> None:
+    """Print the CLI startup banner.
+
+    Args:
+        include_logo: If True, print the AIFT ASCII logo before the version line.
+            If False, print only the version line.
+    """
+    if include_logo:
+        _prepare_stdout_for_text(AIFT_LOGO)
+        print(AIFT_LOGO)
+        print()
+    print(_format_startup_line())
+
+
+def _make_progress_callback(quiet: bool) -> Any:
+    """Create a progress callback function for the automation engine.
+
+    Args:
+        quiet: If True, return None (suppress progress output).
+
+    Returns:
+        A callback ``(phase, message, percentage) -> None`` or None.
+    """
+    if quiet:
+        return None
+
+    phase_labels = {
+        "discovery": "DISCOVERY",
+        "hashing": "HASHING  ",
+        "parsing": "PARSING  ",
+        "analysis": "ANALYSIS ",
+        "reporting": "REPORTING",
+    }
+
+    def _callback(phase: str, message: str, percentage: float) -> None:
+        """Print a formatted progress line to stdout.
+
+        Args:
+            phase: Pipeline phase name.
+            message: Human-readable status message.
+            percentage: Progress within the phase (0.0--100.0).
+        """
+        label = phase_labels.get(phase, phase.upper().ljust(9))
+        print(f"[{label}] {message}")
+
+    return _callback
+
+
+def _resolve_date_range(
+    date_start: str | None,
+    date_end: str | None,
+) -> tuple[str, str] | None:
+    """Validate CLI date-range arguments and return an engine tuple.
+
+    Args:
+        date_start: Raw ``--date-start`` value.
+        date_end: Raw ``--date-end`` value.
+
+    Returns:
+        ``(start_date, end_date)`` tuple, or ``None`` if no range was supplied.
+
+    Raises:
+        SystemExit: If only one side is provided, or the shared validator
+            rejects the format/range.
+    """
+    if not date_start and not date_end:
+        return None
+    if not date_start or not date_end:
+        print(
+            "ERROR: Both --date-start and --date-end must be provided together.",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_FAILURE)
+
+    from app.utils.artifact_profiles import validate_analysis_date_range
+
+    try:
+        validated = validate_analysis_date_range(
+            {"start_date": date_start, "end_date": date_end}
+        )
+    except ValueError as exc:
+        print(f"ERROR: Invalid date range: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_FAILURE) from None
+
+    if validated is None:
+        return None
+    return (validated["start_date"], validated["end_date"])
+
+
+def _print_summary(result: Any) -> None:
+    """Print the final summary block after automation completes.
+
+    The evidence line reports how many of the discovered evidence images
+    were processed successfully; images that failed to process are listed
+    in the warnings section.
+
+    Args:
+        result: An ``AutomationResult`` instance from the automation engine.
+    """
+    separator = "=" * 60
+    print()
+    print(separator)
+    if result.success:
+        print("AIFT Automation Complete")
+    else:
+        print("AIFT Automation Complete (with errors)")
+    print(separator)
+    successful_images = getattr(result, "successful_images", 0)
+    print(f"  Case ID:      {result.case_id or 'N/A'}")
+    print(
+        f"  Evidence:     {successful_images} of "
+        f"{len(result.evidence_files)} discovered evidence image(s) "
+        "processed successfully"
+    )
+    print(f"  Duration:     {_format_duration(result.duration_seconds)}")
+    print()
+
+    if result.html_report_path or result.json_report_path:
+        print("  Reports:")
+        if result.html_report_path:
+            print(f"    HTML: {result.html_report_path}")
+        if result.json_report_path:
+            print(f"    JSON: {result.json_report_path}")
+        case_local_html = getattr(result, "case_local_html_report_path", None)
+        if case_local_html and case_local_html != result.html_report_path:
+            print(f"    Case-local HTML: {case_local_html}")
+        case_local_json = getattr(result, "case_local_json_report_path", None)
+        if case_local_json and case_local_json != result.json_report_path:
+            print(f"    Case-local JSON: {case_local_json}")
+        print()
+
+    if getattr(result, "analysis_results_path", None):
+        print("  Case Analysis Payload:")
+        print(f"    analysis_results.json: {result.analysis_results_path}")
+        print()
+
+    if result.errors:
+        print(f"  Errors: {len(result.errors)}")
+        for err in result.errors:
+            print(f"    - {err}")
+        print()
+
+    if result.warnings:
+        print(f"  Warnings: {len(result.warnings)}")
+        for warn in result.warnings:
+            print(f"    - {warn}")
+        print()
+
+    notices = getattr(result, "notices", None) or []
+    if notices:
+        print(f"  Notes: {len(notices)}")
+        for note in notices:
+            print(f"    - {note}")
+        print()
+
+    print(separator)
+
+
+def _list_profiles() -> None:
+    """Load and print all available artifact profiles, then exit.
+
+    Profiles are always listed from the repository ``profile`` directory;
+    the ``--config`` option does not influence profile resolution.
+
+    Raises:
+        SystemExit: Always exits with code 0 after printing.
+    """
+    from app.utils.artifact_profiles import compose_profile_summaries, resolve_profiles_root
+
+    profiles_root = resolve_profiles_root()
+    profiles = compose_profile_summaries(profiles_root)
+
+    if not profiles:
+        print("No artifact profiles found.")
+        raise SystemExit(EXIT_SUCCESS)
+
+    print("Available artifact profiles:\n")
+    for profile in profiles:
+        name = profile.get("name", "unknown")
+        builtin = profile.get("builtin", False)
+        artifact_count = profile.get("artifact_count", 0)
+        tag = " (built-in)" if builtin else ""
+        print(f"  {name}{tag} — {artifact_count} artifacts")
+        notice = str(profile.get("notice", "") or "").strip()
+        if notice:
+            print(f"      Note: {notice}")
+
+    print()
+    raise SystemExit(EXIT_SUCCESS)
+
+
+def _show_version() -> None:
+    """Print the AIFT version and exit.
+
+    Raises:
+        SystemExit: Always exits with code 0 after printing.
+    """
+    from app.utils.version import TOOL_VERSION
+
+    print(f"AIFT v{TOOL_VERSION}")
+    raise SystemExit(EXIT_SUCCESS)
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Configure Python logging for the CLI session.
+
+    Args:
+        verbose: If True, set loggers to DEBUG. Otherwise, only errors are
+            printed.
+    """
+    level = logging.DEBUG if verbose else logging.ERROR
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    for handler in root_logger.handlers:
+        handler.setLevel(level)
+    logging.getLogger("app").setLevel(level)
+
+
+def main() -> None:
+    """Parse arguments and run the AIFT automation pipeline.
+
+    This is the CLI entry point. It validates the Python version, parses
+    command-line arguments, resolves the investigation prompt, builds an
+    ``AutomationRequest``, calls ``run_automation()``, and prints the
+    summary.
+
+    Raises:
+        SystemExit: With exit code 0 (success), 1 (failure), or
+            2 (partial success with warnings).
+    """
+    assert_supported_python_version()
+
+    # Check for early-exit flags before full argument parsing, since
+    # --version and --list-profiles should work without -e and -p.
+    if "--version" in sys.argv[1:]:
+        _show_version()
+    if "--list-profiles" in sys.argv[1:]:
+        _configure_logging("--verbose" in sys.argv[1:])
+        _list_profiles()
+
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    _configure_logging(args.verbose)
+    if not args.quiet:
+        _print_startup_banner(include_logo=not args.no_logo)
+
+    # Resolve prompt (may be a file reference).
+    prompt = _resolve_prompt(args.prompt)
+    if not prompt:
+        print("ERROR: Investigation prompt must not be empty.", file=sys.stderr)
+        raise SystemExit(EXIT_FAILURE)
+
+    date_range = _resolve_date_range(args.date_start, args.date_end)
+
+    # Resolve only explicit output directories.  When omitted, the automation
+    # engine resolves reports into the created case's reports directory.
+    output_dir = Path(args.output).resolve() if args.output else None
+
+    # Lazy-import the automation engine to avoid loading Flask.
+    from app.automation.engine import AutomationRequest, run_automation
+
+    request = AutomationRequest(
+        evidence_path=args.evidence,
+        prompt=prompt,
+        output_dir=output_dir,
+        profile_name=args.profile,
+        config_path=args.config,
+        case_name=args.case_name,
+        skip_hashing=args.skip_hashing,
+        date_range=date_range,
+    )
+
+    progress_callback = _make_progress_callback(args.quiet)
+
+    try:
+        result = run_automation(request, progress_callback=progress_callback)
+    except KeyboardInterrupt:
+        print("\nAborted by user.", file=sys.stderr)
+        raise SystemExit(EXIT_FAILURE) from None
+    except Exception as exc:
+        logging.getLogger(__name__).debug("Unhandled exception", exc_info=True)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+        raise SystemExit(EXIT_FAILURE) from None
+
+    _print_summary(result)
+
+    if not result.success:
+        raise SystemExit(EXIT_FAILURE)
+    if result.warnings:
+        raise SystemExit(EXIT_PARTIAL)
+    raise SystemExit(EXIT_SUCCESS)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except UnsupportedPythonVersionError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(EXIT_FAILURE) from None

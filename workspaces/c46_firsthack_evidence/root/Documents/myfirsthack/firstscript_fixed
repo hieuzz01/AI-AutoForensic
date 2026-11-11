@@ -1,0 +1,7 @@
+echo "Showing you your current path"
+pwd
+echo "Show my default route"
+ip route | grep --color default
+echo "Show network connections w/ port 80"
+netstat | grep --color 80
+echo "Heck yeah! I can write bash too Young"

@@ -1,0 +1,540 @@
+"""Evidence scanner for automated forensic triage.
+
+Discovers the highest-level forensic evidence targets that Dissect can open,
+with recursive fallback for folders and archives that are not directly
+loadable. Split-image segments are deduplicated within each sibling set.
+Empty (0-byte) evidence files are skipped with a clear warning recorded on
+the run's warnings list so every discovery consumer (GUI Scan Directory,
+automation/CLI runs, and the MCP discovery tool) surfaces the skip.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from dissect.target import Target
+
+from app.evidence.archive_resolver import (
+    can_open_with_dissect,
+    resolve_archive_descriptor,
+)
+from app.evidence.descriptor import EvidenceDescriptor, descriptor_for_path
+from app.evidence.archives import (
+    ARCHIVE_EXTENSIONS,
+    ArchiveExtractionLimits,
+    DEFAULT_ARCHIVE_LIMITS,
+)
+from app.evidence.constants import DISSECT_EVIDENCE_EXTENSIONS
+from app.evidence.segments import (
+    collect_segment_group_paths,
+    extend_segment_group_with_lettered,
+    segment_identity,
+    validate_segment_group_paths,
+)
+
+LOGGER = logging.getLogger(__name__)
+
+SKIP_NAMES: frozenset[str] = frozenset({
+    "__MACOSX", "Thumbs.db", "desktop.ini", ".DS_Store",
+})
+SKIP_NAMES_CASEFOLD: frozenset[str] = frozenset(
+    name.casefold() for name in SKIP_NAMES
+)
+
+
+@dataclass
+class _DiscoveryContext:
+    """Mutable state shared across a recursive discovery run.
+
+    Attributes:
+        source_root: Resolved root of the selected evidence path.
+        workspace_root: Root directory for archive fallback extraction.
+        source_mode: Evidence provenance label for produced descriptors.
+        extraction_count: Number of extraction directories handed out.
+        visited_directories: Resolved directories already scanned.
+        limits: Archive extraction safety limits applied to every archive
+            fallback extraction (outer and nested) in this run.
+        warnings: Non-fatal warning messages recorded while scanning, such
+            as corrupt or unreadable archives skipped during directory
+            recursion and empty (0-byte) evidence files skipped anywhere
+            in the scan.
+    """
+
+    source_root: Path | None = None
+    workspace_root: Path | None = None
+    source_mode: str = "path"
+    extraction_count: int = 0
+    visited_directories: set[Path] = field(default_factory=set)
+    limits: ArchiveExtractionLimits = DEFAULT_ARCHIVE_LIMITS
+    warnings: list[str] = field(default_factory=list)
+
+    def next_extraction_dir(self, source_path: Path) -> Path:
+        """Return a fresh extraction directory for *source_path*."""
+        if self.workspace_root is None:
+            self.workspace_root = Path(
+                tempfile.mkdtemp(prefix="aift-automation-discovery-")
+            ).resolve()
+        else:
+            self.workspace_root.mkdir(parents=True, exist_ok=True)
+
+        self.extraction_count += 1
+        safe_stem = _safe_component(source_path.stem)
+        return self.workspace_root / (
+            f"extracted_{safe_stem}_{self.extraction_count:04d}"
+        )
+
+    def contains_allowed_path(self, path: Path) -> bool:
+        """Return True when *path* stays in selected or managed roots."""
+        resolved = _resolve_discovery_path(path)
+        if resolved is None:
+            return False
+        roots = [
+            root
+            for root in (self.source_root, self.workspace_root)
+            if root is not None
+        ]
+        return any(resolved.is_relative_to(root) for root in roots)
+
+
+def validate_evidence_path(path: str | Path) -> Path:
+    """Resolve and validate an evidence path.
+
+    Strips surrounding quotes, expands user home dir, resolves to absolute,
+    rejects path traversal (``..`` components), and verifies existence.
+
+    Args:
+        path: Raw path string from user input.
+
+    Returns:
+        Resolved absolute Path.
+
+    Raises:
+        FileNotFoundError: If resolved path does not exist.
+        ValueError: If path contains traversal components or is empty.
+    """
+    raw = str(path).strip().strip("'\"").strip()
+    if not raw:
+        raise ValueError("Evidence path must not be empty.")
+
+    resolved = Path(raw).expanduser().resolve()
+
+    # Reject traversal components in the original input.
+    # UNC paths (e.g. \\server\share) start with \\ on Windows; their
+    # Path.parts begin with the share root, never "..".
+    parts = Path(raw).parts
+    if ".." in parts:
+        raise ValueError(
+            f"Path contains traversal component '..': {raw}"
+        )
+
+    # Follow symlinks. resolve() already does this, but verify the final
+    # target exists because broken symlink behavior varies by platform.
+    if not resolved.exists():
+        raise FileNotFoundError(f"Evidence path does not exist: {resolved}")
+
+    return resolved
+
+
+def _is_hidden_or_skipped(path: Path) -> bool:
+    """Return True if *path* should be skipped during scanning."""
+    return path.name.startswith(".") or path.name.casefold() in SKIP_NAMES_CASEFOLD
+
+
+def _has_supported_extension(path: Path) -> bool:
+    """Return True if *path* has a supported evidence extension.
+
+    Lettered EWF continuation segments (``.EAA`` and beyond) are
+    deliberately not matched here because their pattern overlaps common
+    unrelated extensions; they are pulled into discovery results through
+    their numeric anchor segment's sibling group instead.
+    """
+    return (
+        path.suffix.lower() in DISSECT_EVIDENCE_EXTENSIONS
+        or segment_identity(path) is not None
+    )
+
+
+def _is_archive(path: Path) -> bool:
+    """Return True if *path* is an archive with extraction fallback."""
+    return path.suffix.lower() in ARCHIVE_EXTENSIONS
+
+
+def _skip_empty_file(path: Path, context: _DiscoveryContext) -> bool:
+    """Skip an empty (0-byte) evidence file, recording a clear warning.
+
+    Dissect cannot open empty files, so discovery excludes them up front
+    and surfaces the skip through the context's warnings list. This backs
+    every discovery consumer (GUI Scan Directory, automation/CLI runs, and
+    the MCP discovery tool) with the same warning message.
+
+    Args:
+        path: Candidate evidence file path to check.
+        context: Shared discovery state whose warnings list receives the
+            skip message.
+
+    Returns:
+        True when *path* is an existing regular file of zero size and was
+        therefore skipped; False when the file has content or its size
+        cannot be read (unreadable files are left for later pipeline
+        stages to report).
+    """
+    try:
+        if not path.is_file() or path.stat().st_size > 0:
+            return False
+    except OSError:
+        return False
+    message = (
+        f"Skipped empty evidence file '{path.name}' (0 bytes): "
+        "Dissect cannot process empty files."
+    )
+    LOGGER.warning(message)
+    context.warnings.append(message)
+    return True
+
+
+def _safe_component(value: str) -> str:
+    """Return a filesystem-safe name component."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
+    return cleaned or "evidence"
+
+
+def _can_open_with_dissect(path: Path) -> bool:
+    """Probe whether Dissect can open *path* as a target."""
+    return can_open_with_dissect(path)
+
+
+def _resolve_discovery_path(path: Path) -> Path | None:
+    """Resolve a discovery path, returning None for symlink loops."""
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError) as exc:
+        LOGGER.info(
+            "Skipping unresolvable path during evidence discovery: %s (%s)",
+            path,
+            exc,
+        )
+        return None
+
+
+def _deduplicate_segments(
+    paths: list[Path],
+    *,
+    source_mode: str,
+) -> list[EvidenceDescriptor]:
+    """Return descriptors for files, deduplicating split-image segments.
+
+    Numeric split-image candidates are grouped and validated; groups whose
+    numeric run reaches segment 99 additionally pull in lettered EWF
+    continuation siblings (``.EAA`` and beyond) so every segment file is
+    hashed, even though lettered names never become standalone candidates.
+    """
+    groups: dict[tuple[str, str], list[Path]] = {}
+    non_segments: list[Path] = []
+
+    for path in paths:
+        segment = segment_identity(path)
+        if segment is None:
+            non_segments.append(path)
+            continue
+
+        kind, base, _segment_number = segment
+        groups.setdefault((kind, base), []).append(path)
+
+    descriptors: list[EvidenceDescriptor] = [
+        descriptor_for_path(path, source_mode=source_mode) for path in non_segments
+    ]
+    for group in groups.values():
+        ordered_group = extend_segment_group_with_lettered(
+            validate_segment_group_paths(group)
+        )
+        descriptors.append(
+            descriptor_for_path(
+                ordered_group[0],
+                source_mode=source_mode,
+                files_to_hash=ordered_group,
+                primary_dissect_path=ordered_group[0],
+            )
+        )
+        if len(group) > 1:
+            LOGGER.debug(
+                "Segment group with %d parts, keeping: %s",
+                len(group),
+                group[0].name,
+            )
+
+    return descriptors
+
+
+def _discover_file(
+    path: Path,
+    context: _DiscoveryContext,
+    *,
+    strict_extension: bool,
+) -> list[EvidenceDescriptor]:
+    """Discover evidence for a single file path.
+
+    Archive fallback scans use the archive's extracted root as the temporary
+    workspace while recursing so nested archive outputs remain contained by
+    the parent extraction tree selected later.
+
+    Empty (0-byte) files — including empty archives and empty split-image
+    anchor segments — are skipped with a warning recorded on the context,
+    regardless of whether the file was explicitly selected or reached
+    through recursion, because Dissect cannot process them.
+
+    ``strict_extension`` is True only when *path* is the explicitly selected
+    evidence path. For explicitly selected archives every validation or read
+    failure propagates so the caller fails loudly. During directory
+    recursion a corrupt or unreadable archive is skipped with a warning
+    recorded on the context so one bad archive cannot abort the whole scan;
+    ``"Archive rejected:"`` safety errors (hostile or limit-violating
+    content) always abort regardless of how the archive was reached.
+
+    Args:
+        path: Resolved file path to discover evidence for.
+        context: Shared discovery state for this run.
+        strict_extension: True when *path* is the explicitly selected
+            evidence path; enables strict extension validation and disables
+            the per-archive skip behavior.
+
+    Returns:
+        Descriptors discovered for *path*; empty when the file is skipped.
+
+    Raises:
+        ValueError: If the explicitly selected path has an unsupported
+            extension or is an invalid archive, or if any archive is
+            rejected for safety reasons (``"Archive rejected:"``).
+        OSError: If reading the explicitly selected archive fails.
+    """
+    if not _has_supported_extension(path):
+        if strict_extension:
+            raise ValueError(
+                f"Unsupported evidence file extension '{path.suffix}': "
+                f"{path.name}"
+            )
+        return []
+
+    if _skip_empty_file(path, context):
+        return []
+
+    if not _is_archive(path):
+        if segment_identity(path) is not None:
+            segment_paths = collect_segment_group_paths(path)
+            return [
+                descriptor_for_path(
+                    path,
+                    source_mode=context.source_mode,
+                    files_to_hash=segment_paths,
+                    primary_dissect_path=segment_paths[0],
+                )
+            ]
+        return [descriptor_for_path(path, source_mode=context.source_mode)]
+
+    try:
+        return [
+            resolve_archive_descriptor(
+                path,
+                lambda: context.next_extraction_dir(path),
+                limits=context.limits,
+                source_mode=context.source_mode,
+            )
+        ]
+    except (ValueError, OSError) as error:
+        if strict_extension:
+            raise
+        if isinstance(error, ValueError) and str(error).startswith(
+            "Archive rejected:"
+        ):
+            raise
+        message = (
+            f"Skipped archive '{path.name}' during evidence discovery: "
+            f"{error}"
+        )
+        LOGGER.warning(message)
+        context.warnings.append(message)
+        return []
+
+
+def _discover_directory(path: Path, context: _DiscoveryContext) -> list[EvidenceDescriptor]:
+    """Discover evidence targets in a directory.
+
+    Directly loadable directories are returned as a single target; other
+    directories are scanned recursively. File candidates whose target path
+    is an empty (0-byte) file — including split-image groups whose anchor
+    segment is empty — are skipped with a warning recorded on the context.
+
+    Children are deduplicated by their resolved path: a symlink and the
+    sibling it points to (or two links to one file) collapse to a single
+    candidate, so split-image segment validation never sees the same file
+    twice as a spurious duplicate segment.
+
+    Args:
+        path: Directory to scan.
+        context: Shared discovery state for this run.
+
+    Returns:
+        Descriptors discovered under *path*, sorted by target path string;
+        empty when the directory is unreadable, already visited, or outside
+        the allowed roots.
+
+    Raises:
+        ValueError: If a sibling split-image segment set is incomplete or
+            ambiguous, or a nested archive is rejected for safety reasons.
+    """
+    directory = _resolve_discovery_path(path)
+    if directory is None:
+        return []
+    if not context.contains_allowed_path(directory):
+        LOGGER.info("Skipping directory outside selected evidence tree: %s", directory)
+        return []
+    if directory in context.visited_directories:
+        return []
+    context.visited_directories.add(directory)
+
+    if _can_open_with_dissect(directory):
+        return [descriptor_for_path(directory, source_mode=context.source_mode)]
+
+    file_candidates: list[Path] = []
+    recursive_candidates: list[Path] = []
+    seen_targets: set[Path] = set()
+
+    for child in sorted(directory.iterdir(), key=lambda item: str(item)):
+        if _is_hidden_or_skipped(child):
+            continue
+
+        child_path = _resolve_discovery_path(child)
+        if child_path is None:
+            continue
+        if not context.contains_allowed_path(child_path):
+            LOGGER.info(
+                "Skipping path outside selected evidence tree during discovery: %s",
+                child_path,
+            )
+            continue
+        if child_path in seen_targets:
+            # A symlink and its target (or two links to one file) resolve to
+            # the same path; keep only the first so segment validation does
+            # not reject the set as having a duplicate segment.
+            continue
+        seen_targets.add(child_path)
+        if child_path.is_dir():
+            recursive_candidates.append(child_path)
+        elif child_path.is_file() and _has_supported_extension(child_path):
+            if _is_archive(child_path):
+                recursive_candidates.append(child_path)
+            else:
+                file_candidates.append(child_path)
+
+    result = [
+        descriptor
+        for descriptor in _deduplicate_segments(
+            file_candidates,
+            source_mode=context.source_mode,
+        )
+        if not _skip_empty_file(descriptor.dissect_path, context)
+    ]
+    for child_path in recursive_candidates:
+        result.extend(_discover_path(child_path, context, strict_extension=False))
+
+    return sorted(result, key=lambda item: str(item.dissect_path))
+
+
+def _discover_path(
+    path: Path,
+    context: _DiscoveryContext,
+    *,
+    strict_extension: bool,
+) -> list[EvidenceDescriptor]:
+    """Dispatch discovery based on path type."""
+    resolved = _resolve_discovery_path(path)
+    if resolved is None:
+        return []
+    if not context.contains_allowed_path(resolved):
+        LOGGER.info("Skipping path outside selected evidence tree: %s", resolved)
+        return []
+    if resolved.is_file():
+        return _discover_file(resolved, context, strict_extension=strict_extension)
+    if resolved.is_dir():
+        return _discover_directory(resolved, context)
+    return []
+
+
+def discover_evidence(
+    source_path: str | Path,
+    *,
+    workspace_dir: str | Path | None = None,
+    source_mode: str = "path",
+    limits: ArchiveExtractionLimits = DEFAULT_ARCHIVE_LIMITS,
+    warnings: list[str] | None = None,
+) -> list[EvidenceDescriptor]:
+    """Discover all forensic evidence targets at the given path.
+
+    Discovery uses target-aware recursion: image files are returned directly,
+    archives and folders are first probed with Dissect, and only non-loadable
+    archives or folders are extracted/descended into.
+
+    Directory scans are resilient to bad archives: a corrupt, empty, or
+    unreadable archive encountered during directory recursion is skipped
+    with a warning instead of aborting the scan, so one broken file cannot
+    hide the remaining evidence. The failure still propagates when the
+    archive is the explicitly selected ``source_path``, and
+    ``"Archive rejected:"`` safety errors (hostile or limit-violating
+    content) always abort the whole discovery.
+
+    Empty (0-byte) evidence files are never returned as targets: whether
+    explicitly selected or found during a scan, each one is skipped with a
+    clear warning recorded on the supplied warnings list, because Dissect
+    cannot process empty files. A split-image group whose anchor segment
+    is empty is skipped as a whole.
+
+    Args:
+        source_path: Path to a single evidence file or a directory to scan.
+        workspace_dir: Optional root directory for archive fallback extraction.
+            Automation passes the case evidence directory here so extracted
+            files become stable case-owned evidence targets.
+        source_mode: Evidence provenance label for returned descriptors.
+        limits: Archive extraction safety limits applied to every archive
+            fallback extraction in this run, including nested archives found
+            inside extraction roots. The byte budget is enforced per
+            extracted archive (each extraction has its own total counter),
+            not as an aggregate bound across the whole run.
+        warnings: Optional caller-supplied list that receives non-fatal
+            warning messages (one per archive skipped during directory
+            recursion and one per empty evidence file skipped). When
+            omitted, skip warnings are only logged.
+
+    Returns:
+        Sorted list of unique evidence descriptors, each pointing to a viable
+        evidence file or directory target. Empty list if no evidence found.
+
+    Raises:
+        FileNotFoundError: If source_path does not exist.
+        ValueError: If source_path is a file but has no supported extension,
+            if source_path itself is an invalid or unreadable archive, or if
+            any archive (selected or nested) rejects unsafe member paths or
+            exceeds the supplied extraction limits.
+    """
+    resolved = Path(source_path).resolve()
+
+    if not resolved.exists():
+        raise FileNotFoundError(f"Evidence path does not exist: {resolved}")
+
+    workspace_root = (
+        Path(workspace_dir).resolve() if workspace_dir is not None else None
+    )
+    context = _DiscoveryContext(
+        source_root=resolved,
+        workspace_root=workspace_root,
+        source_mode=source_mode,
+        limits=limits,
+        warnings=warnings if warnings is not None else [],
+    )
+    result = _discover_path(resolved, context, strict_extension=True)
+    result = sorted(set(result), key=lambda item: str(item.dissect_path))
+
+    LOGGER.info("Discovered %d evidence target(s) in %s", len(result), resolved)
+    return result

@@ -1,0 +1,938 @@
+"""Data preparation pipeline for forensic artifact analysis.
+
+Handles date extraction from investigation context, CSV reading,
+column projection, deduplication, date filtering, statistics computation,
+and final prompt assembly for AI analysis.
+
+Attributes:
+    LOGGER: Module-level logger instance.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import logging
+from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Mapping
+
+from .constants import (
+    DEDUP_COMMENT_COLUMN,
+    DEDUPLICATED_PARSED_DIRNAME,
+    LOW_SIGNAL_VALUES,
+    METADATA_COLUMNS,
+)
+from .ioc import (
+    build_artifact_final_context_reminder,
+    build_priority_directives,
+    extract_ioc_targets,
+    format_ioc_targets,
+)
+from .prompt_sections import append_analysis_prompt_footer, wrap_prompt_section
+from .utils import (
+    extract_row_datetime,
+    format_datetime,
+    is_dedup_safe_identifier_column,
+    looks_like_timestamp_column,
+    normalize_artifact_key,
+    normalize_csv_row,
+    normalize_table_cell,
+    parse_datetime_value,
+    build_scoped_artifact_stem,
+    stringify_value,
+    time_range_for_rows,
+)
+
+LOGGER = logging.getLogger(__name__)
+
+__all__ = [
+    "ArtifactPrepResult",
+    "prepare_artifact_data",
+    "write_analysis_input_csv",
+    "resolve_analysis_input_output_dir",
+    "build_artifact_csv_attachment",
+    "counter_normalize",
+    "compute_statistics",
+    "select_ai_columns",
+    "project_rows_for_analysis",
+    "deduplicate_rows_for_analysis",
+    "build_full_data_csv",
+    "_filter_by_date_range",
+]
+
+
+@dataclass(frozen=True)
+class ArtifactPrepResult:
+    """Analysis-ready prompt and canonical parser/data-prep metadata."""
+
+    prompt_text: str
+    analysis_csv_path: Path
+    analysis_columns: list[str]
+    metadata: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Statistics and normalisation
+# ---------------------------------------------------------------------------
+
+def counter_normalize(value: str) -> str:
+    """Normalize a cell value for frequency counting in statistics.
+
+    Args:
+        value: Raw cell value string.
+
+    Returns:
+        The normalized value, or empty string if low-signal.
+    """
+    cleaned = normalize_table_cell(value=value, cell_limit=120)
+    if cleaned.lower() in LOW_SIGNAL_VALUES:
+        return ""
+    return cleaned
+
+
+def compute_statistics(
+    rows: list[dict[str, str]],
+    columns: list[str],
+) -> tuple[str, datetime | None, datetime | None]:
+    """Compute record count, time range, and top-20 frequent values per column.
+
+    Args:
+        rows: List of normalized CSV row dicts.
+        columns: Column names for frequency statistics.
+
+    Returns:
+        A 3-tuple of ``(statistics_text, min_time, max_time)``.
+    """
+    total_records = len(rows)
+    min_time, max_time = time_range_for_rows(rows)
+    counters: dict[str, Counter[str]] = {column: Counter() for column in columns}
+
+    for row in rows:
+        for column in columns:
+            value = counter_normalize(row.get(column, ""))
+            if value:
+                counters[column][value] += 1
+
+    lines = [
+        f"Record count: {total_records}",
+        f"Time range start: {format_datetime(min_time)}",
+        f"Time range end: {format_datetime(max_time)}",
+    ]
+
+    if columns:
+        lines.append("Top values (up to 20 per key column):")
+        for column in columns:
+            lines.append(f"- {column}:")
+            top_values = counters[column].most_common(20)
+            if not top_values:
+                lines.append("  (no non-empty values)")
+                continue
+            for value, count in top_values:
+                lines.append(f"  {count}x {value}")
+    else:
+        lines.append("Top values: no key columns selected.")
+
+    return "\n".join(lines), min_time, max_time
+
+
+# ---------------------------------------------------------------------------
+# Column selection and projection
+# ---------------------------------------------------------------------------
+
+def _artifact_lookup_candidates(artifact_key: str) -> list[str]:
+    """Return artifact keys to try from most specific to most general."""
+    normalized_key = normalize_artifact_key(artifact_key)
+    candidates: list[str] = []
+
+    def add(candidate: str) -> None:
+        clean = candidate.strip().lower()
+        if clean and clean not in candidates:
+            candidates.append(clean)
+
+    add(normalized_key)
+
+    # Split EVTX and similar files use "<artifact_key>_<group>.csv". Preserve
+    # dotted parent keys first so "defender.evtx_<channel>" finds
+    # "defender.evtx" before the coarser "defender" fallback.
+    if "_" in normalized_key:
+        add(normalized_key.split("_", 1)[0])
+
+    # Keep the historical generic fallback for "evtx_security" -> "evtx".
+    if "." in normalized_key:
+        add(normalized_key.split(".", 1)[0])
+
+    return candidates
+
+
+def select_ai_columns(
+    artifact_key: str,
+    available_columns: list[str],
+    column_projections: dict[str, tuple[str, ...]],
+    audit_log_fn: Any = None,
+) -> tuple[list[str], bool]:
+    """Select the subset of CSV columns to include in the AI prompt.
+
+    Args:
+        artifact_key: Artifact identifier for projection lookup.
+        available_columns: Column names present in the source CSV.
+        column_projections: Mapping of artifact keys to column tuples.
+        audit_log_fn: Optional callable for logging missing columns.
+
+    Returns:
+        A 2-tuple of ``(selected_columns, projection_applied)``.
+    """
+    configured_columns: tuple[str, ...] | None = None
+    for candidate_key in _artifact_lookup_candidates(artifact_key):
+        configured_columns = column_projections.get(candidate_key)
+        if configured_columns:
+            break
+    if not configured_columns:
+        return list(available_columns), False
+
+    lookup = {column.strip().lower(): column for column in available_columns}
+    projected_columns: list[str] = []
+    missing_columns: list[str] = []
+    has_wildcard = False
+    for column_name in configured_columns:
+        if column_name.strip() == "*":
+            has_wildcard = True
+            continue
+        matched = lookup.get(column_name.strip().lower())
+        if matched is not None:
+            projected_columns.append(matched)
+        else:
+            missing_columns.append(column_name)
+
+    # A trailing ``*`` means "pass through any remaining columns not already
+    # listed".  This is used for artifacts with dynamic/variable fields (e.g.
+    # systemd service records whose fields vary per unit).
+    if has_wildcard:
+        already_selected = {c.strip().lower() for c in projected_columns}
+        for col in available_columns:
+            if col.strip().lower() not in already_selected:
+                projected_columns.append(col)
+
+    if missing_columns and audit_log_fn is not None:
+        audit_log_fn(
+            "artifact_ai_projection_warning",
+            {"artifact_key": artifact_key, "missing_columns": missing_columns,
+             "available_columns": available_columns},
+        )
+
+    if not projected_columns:
+        return list(available_columns), False
+    return projected_columns, True
+
+
+def project_rows_for_analysis(
+    rows: list[dict[str, str]],
+    columns: list[str],
+) -> list[dict[str, str]]:
+    """Project rows to only the selected columns for analysis.
+
+    Args:
+        rows: List of normalized row dicts.
+        columns: Column names to retain.
+
+    Returns:
+        A new list of row dicts with only the specified columns
+        and ``_row_ref``.
+    """
+    projected_rows: list[dict[str, str]] = []
+    for row in rows:
+        projected: dict[str, str] = {
+            column: stringify_value(row.get(column, ""))
+            for column in columns
+        }
+        row_ref = stringify_value(row.get("_row_ref", ""))
+        if row_ref:
+            projected["_row_ref"] = row_ref
+        projected_rows.append(projected)
+    return projected_rows
+
+
+# ---------------------------------------------------------------------------
+# Deduplication
+# ---------------------------------------------------------------------------
+
+def deduplicate_rows_for_analysis(
+    rows: list[dict[str, str]],
+    columns: list[str],
+) -> tuple[list[dict[str, str]], list[str], int, int, list[str]]:
+    """Deduplicate rows that differ only in timestamp or record-ID columns.
+
+    Args:
+        rows: List of projected row dicts.
+        columns: Column names present in the rows.
+
+    Returns:
+        A 5-tuple of ``(kept_rows, output_columns, removed_count,
+        annotated_count, variant_columns)``.
+    """
+    if not rows or not columns:
+        return list(rows), list(columns), 0, 0, []
+
+    variant_columns = [
+        column for column in columns
+        if looks_like_timestamp_column(column) or is_dedup_safe_identifier_column(column)
+    ]
+    if not variant_columns:
+        return [dict(row) for row in rows], list(columns), 0, 0, []
+
+    variant_set = set(variant_columns)
+    base_columns = [
+        column for column in columns
+        if column not in variant_set and column.lower() not in METADATA_COLUMNS and column != DEDUP_COMMENT_COLUMN
+    ]
+    if not base_columns:
+        return [dict(row) for row in rows], list(columns), 0, 0, variant_columns
+
+    kept_rows: list[dict[str, str]] = []
+    representative_by_key: dict[tuple[tuple[str, str], ...], int] = {}
+    dedup_counts: Counter[int] = Counter()
+
+    for row in rows:
+        normalized_row = {str(key): stringify_value(value) for key, value in row.items()}
+        key = tuple((column, normalized_row.get(column, "")) for column in base_columns)
+        representative_index = representative_by_key.get(key)
+        if representative_index is None:
+            representative_by_key[key] = len(kept_rows)
+            kept_rows.append(normalized_row)
+            continue
+        dedup_counts[representative_index] += 1
+
+    annotated_rows = 0
+    output_columns = list(columns)
+    if dedup_counts:
+        if DEDUP_COMMENT_COLUMN not in output_columns:
+            output_columns.append(DEDUP_COMMENT_COLUMN)
+        for representative_index, dedup_count in dedup_counts.items():
+            kept_rows[representative_index][DEDUP_COMMENT_COLUMN] = (
+                f"Deduplicated {dedup_count} records with matching event data and different timestamp/ID."
+            )
+            annotated_rows += 1
+
+    removed_rows = sum(dedup_counts.values())
+    return kept_rows, output_columns, removed_rows, annotated_rows, variant_columns
+
+
+# ---------------------------------------------------------------------------
+# Data feeding: date filtering
+# ---------------------------------------------------------------------------
+
+
+def _filter_by_date_range(
+    rows: list[dict[str, str]],
+    date_range: tuple[str, str] | None,
+    buffer_days: int = 7,
+) -> list[dict[str, str]]:
+    """Filter rows to those within a date range plus a buffer.
+
+    Parses ``date_range`` start/end strings into datetimes, expands the
+    window by ``buffer_days`` on each side, and keeps only rows whose
+    first parseable timestamp falls within that window.  Rows without a
+    parseable timestamp are always retained (to avoid silently dropping
+    data that may still be relevant).
+
+    Args:
+        rows: List of row dicts to filter.
+        date_range: A 2-tuple of ``(start_date_str, end_date_str)`` or
+            ``None``.  If ``None``, all rows are returned unchanged.
+        buffer_days: Number of days to expand the window on each side.
+
+    Returns:
+        A filtered list of row dicts.
+    """
+    if not date_range or not rows:
+        return list(rows)
+
+    start_str, end_str = date_range
+    start_dt = parse_datetime_value(start_str) if start_str else None
+    end_dt = parse_datetime_value(end_str) if end_str else None
+
+    if start_dt is None and end_dt is None:
+        return list(rows)
+
+    buffer = timedelta(days=buffer_days)
+    if start_dt is not None:
+        start_dt = start_dt - buffer
+    if end_dt is not None:
+        end_dt = end_dt + buffer
+
+    filtered: list[dict[str, str]] = []
+    for row in rows:
+        row_dt = extract_row_datetime(row)
+        if row_dt is None:
+            # Keep rows without timestamps — they may still be relevant.
+            filtered.append(row)
+            continue
+        if start_dt is not None and row_dt < start_dt:
+            continue
+        if end_dt is not None and row_dt > end_dt:
+            continue
+        filtered.append(row)
+
+    LOGGER.debug(
+        "Date filter: %d -> %d rows (range %s to %s, buffer %d days)",
+        len(rows), len(filtered), start_str, end_str, buffer_days,
+    )
+    return filtered
+
+
+# ---------------------------------------------------------------------------
+# CSV serialisation
+# ---------------------------------------------------------------------------
+
+def build_full_data_csv(
+    rows: list[dict[str, str]],
+    columns: list[str],
+) -> str:
+    """Serialize rows to inline CSV text for prompt inclusion.
+
+    Args:
+        rows: List of row dicts to serialize.
+        columns: Column names for the CSV header.
+
+    Returns:
+        A CSV-formatted string with a ``row_ref`` column prepended.
+    """
+    if not columns:
+        return "No columns available."
+
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    visible_columns = [column for column in columns if column != "row_ref"]
+    writer.writerow(["row_ref", *visible_columns])
+    for row in rows:
+        writer.writerow([row.get("_row_ref", ""), *[row.get(column, "") for column in visible_columns]])
+
+    full_csv = buffer.getvalue().strip()
+    if not full_csv:
+        return "No rows available for analysis."
+    return full_csv
+
+
+# ---------------------------------------------------------------------------
+# Analysis-input CSV output
+# ---------------------------------------------------------------------------
+
+def resolve_analysis_input_output_dir(case_dir: Path | None, source_csv_path: Path) -> Path:
+    """Determine the output directory for derived analysis-input CSV files.
+
+    Derived AI analysis inputs (projected, deduplicated, or combined CSVs)
+    belong in a ``parsed_deduplicated/`` directory, never alongside the
+    non-lossy parser output in ``parsed/``.  Resolution order:
+
+    1. If the source CSV already lives in a ``parsed_deduplicated/``
+       directory (e.g. a derived ``<artifact>_combined.csv``), reuse that
+       directory unchanged so image-scoped derived files stay under the
+       image's ``parsed_deduplicated/`` instead of falling through to a
+       case-root ``parsed_deduplicated/``, which must never be created
+       for image-scoped cases.
+    2. If the source CSV lives in a ``parsed/`` directory, use the
+       ``parsed_deduplicated/`` sibling of that directory.
+    3. Otherwise use ``case_dir/parsed_deduplicated`` when a case
+       directory is known, or a ``parsed_deduplicated/`` subdirectory of
+       the source CSV's parent as a last resort.
+
+    Args:
+        case_dir: Optional case directory path.
+        source_csv_path: Path to the source CSV file (an original parsed
+            CSV, or an already-derived analysis input such as a combined
+            split-artifact CSV).
+
+    Returns:
+        A ``Path`` to the output directory.
+    """
+    parent = source_csv_path.parent
+    if parent.name.strip().lower() == DEDUPLICATED_PARSED_DIRNAME:
+        return parent
+    if parent.name.strip().lower() == "parsed":
+        return parent.parent / DEDUPLICATED_PARSED_DIRNAME
+    if case_dir is not None:
+        return case_dir / DEDUPLICATED_PARSED_DIRNAME
+    return parent / DEDUPLICATED_PARSED_DIRNAME
+
+
+def _analysis_input_filename(source_csv_path: Path, analysis_scope_id: str | None = None) -> str:
+    """Build a collision-safe analysis-input CSV filename.
+
+    Args:
+        source_csv_path: Source parsed CSV path.
+        analysis_scope_id: Optional image/scope identifier.
+
+    Returns:
+        A filename that preserves the source suffix and includes a
+        collision-resistant scope prefix when needed.
+    """
+    if not analysis_scope_id:
+        return source_csv_path.name
+    suffix = source_csv_path.suffix or ".csv"
+    return f"{build_scoped_artifact_stem(analysis_scope_id, source_csv_path.stem)}{suffix}"
+
+
+def _non_colliding_analysis_input_path(output_path: Path, source_csv_path: Path) -> Path:
+    """Return an analysis-input output path that never overwrites its source.
+
+    With no ``analysis_scope_id``, :func:`_analysis_input_filename` returns
+    the source CSV's own filename.  When the source already lives in a
+    ``parsed_deduplicated/`` directory (e.g. a derived
+    ``<artifact>_combined.csv`` for a split artifact),
+    :func:`resolve_analysis_input_output_dir` reuses that directory, so the
+    resolved output path would be the source file itself and writing it
+    would clobber the combined source in place.  Production flows always
+    set a scope id, but direct unscoped ``analyze_artifact()`` calls must
+    stay non-destructive, so this guard disambiguates the filename with an
+    ``_analysis_input`` stem suffix instead.
+
+    Args:
+        output_path: Candidate analysis-input output path.
+        source_csv_path: Source CSV the analysis input is derived from.
+
+    Returns:
+        ``output_path`` unchanged when it does not collide with
+        ``source_csv_path``, otherwise a sibling path with
+        ``_analysis_input`` appended to the stem.
+    """
+    try:
+        collides = output_path.resolve() == source_csv_path.resolve()
+    except OSError:
+        collides = output_path == source_csv_path
+    if not collides:
+        return output_path
+    suffix = output_path.suffix or ".csv"
+    return output_path.with_name(f"{output_path.stem}_analysis_input{suffix}")
+
+
+def _unique_column_name(candidate: str, used_columns: set[str]) -> str:
+    """Return a column name that does not collide with existing names."""
+    if candidate not in used_columns:
+        used_columns.add(candidate)
+        return candidate
+    index = 2
+    while f"{candidate}_{index}" in used_columns:
+        index += 1
+    unique = f"{candidate}_{index}"
+    used_columns.add(unique)
+    return unique
+
+
+def _analysis_visible_columns(source_columns: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Rename source ``row_ref`` columns away from the citation column.
+
+    The AI-visible CSV always reserves ``row_ref`` as the authoritative
+    generated citation column. If parsed evidence already has a ``row_ref``
+    field, preserve it under ``source_row_ref`` (or a suffixed variant).
+    """
+    visible_columns: list[str] = []
+    column_renames: dict[str, str] = {}
+    used_columns: set[str] = set()
+    for column in source_columns:
+        clean_column = stringify_value(column)
+        if clean_column.strip().lower() == "row_ref":
+            visible = _unique_column_name("source_row_ref", used_columns)
+        else:
+            visible = _unique_column_name(clean_column, used_columns)
+        visible_columns.append(visible)
+        if visible != clean_column:
+            column_renames[clean_column] = visible
+    return visible_columns, column_renames
+
+
+def write_analysis_input_csv(
+    source_csv_path: Path,
+    rows: list[dict[str, str]],
+    columns: list[str],
+    case_dir: Path | None = None,
+    analysis_scope_id: str | None = None,
+) -> Path:
+    """Write deduplicated/projected rows to a new CSV file for audit.
+
+    The output never overwrites ``source_csv_path``: when the resolved
+    output path collides with the source (an unscoped run whose source CSV
+    already lives in ``parsed_deduplicated/``, such as a derived combined
+    split-artifact CSV), the filename is disambiguated via
+    :func:`_non_colliding_analysis_input_path` so the source survives.
+
+    Args:
+        source_csv_path: Path to the original parsed CSV.
+        rows: Row dicts to write.
+        columns: Column names for the CSV header.
+        case_dir: Optional case directory.
+        analysis_scope_id: Optional image/scope identifier used to avoid
+            filename collisions in multi-image analysis.
+
+    Returns:
+        Path to the newly written analysis-input CSV file.
+
+    Raises:
+        OSError: If the write fails.
+    """
+    output_dir = resolve_analysis_input_output_dir(case_dir=case_dir, source_csv_path=source_csv_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = _non_colliding_analysis_input_path(
+        output_path=output_dir / _analysis_input_filename(source_csv_path, analysis_scope_id),
+        source_csv_path=source_csv_path,
+    )
+
+    write_columns = [column for column in columns if column != "row_ref"]
+    write_columns = ["row_ref", *write_columns]
+
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=write_columns, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            out: dict[str, str] = {column: row.get(column, "") for column in columns if column != "row_ref"}
+            out["row_ref"] = row.get("_row_ref", "")
+            writer.writerow(out)
+
+    return output_path
+
+
+def build_artifact_csv_attachment(
+    artifact_key: str,
+    csv_path: Path,
+    analysis_scope_id: str | None = None,
+) -> dict[str, str]:
+    """Build an attachment descriptor dict for an artifact CSV file.
+
+    Args:
+        artifact_key: Artifact identifier.
+        csv_path: Path to the CSV file on disk.
+        analysis_scope_id: Optional image/scope identifier used to avoid
+            attachment filename collisions in multi-image analysis.
+
+    Returns:
+        A dict with ``path``, ``name``, and ``mime_type`` keys.
+    """
+    filename_stem = build_scoped_artifact_stem(analysis_scope_id, artifact_key)
+    filename = f"{filename_stem}.csv" if not filename_stem.lower().endswith(".csv") else filename_stem
+    return {"path": str(csv_path), "name": filename, "mime_type": "text/csv"}
+
+
+# ---------------------------------------------------------------------------
+# Full artifact data preparation
+# ---------------------------------------------------------------------------
+
+def prepare_artifact_data(
+    artifact_key: str,
+    investigation_context: str,
+    csv_path: Path,
+    *,
+    artifact_metadata: dict[str, str],
+    artifact_prompt_template: str,
+    artifact_prompt_template_small_context: str,
+    artifact_instruction_prompts: dict[str, str],
+    artifact_ai_column_projections: dict[str, tuple[str, ...]],
+    artifact_deduplication_enabled: bool,
+    ai_max_tokens: int,
+    shortened_prompt_cutoff_tokens: int,
+    case_dir: Path | None,
+    ai_input_max_tokens: int | None = None,
+    audit_log_fn: Any = None,
+    date_range: tuple[str, str] | None = None,
+    host_metadata: Mapping[str, Any] | None = None,
+    analysis_scope_id: str | None = None,
+) -> ArtifactPrepResult:
+    """Prepare one artifact CSV as an analysis-ready prompt.
+
+    Reads the full artifact CSV, applies column projection,
+    deduplication, date filtering, and statistics computation.  Fills
+    the appropriate prompt template with all gathered data.
+
+    When ``date_range`` is provided, rows outside the range (with a
+    7-day buffer) are excluded.  Large datasets are kept intact here
+    and handled later by row-boundary chunking if the prompt exceeds
+    the model input budget.
+
+    Args:
+        artifact_key: Unique identifier for the artifact.
+        investigation_context: Free-text investigation context.
+        csv_path: Path to the artifact CSV file.
+        artifact_metadata: Metadata dict for the artifact.
+        artifact_prompt_template: Full prompt template.
+        artifact_prompt_template_small_context: Shortened prompt template.
+        artifact_instruction_prompts: Per-artifact instruction overrides.
+        artifact_ai_column_projections: Column projection config.
+        artifact_deduplication_enabled: Whether to deduplicate rows.
+        ai_max_tokens: Configured AI context window size.
+        ai_input_max_tokens: Reserved input-token budget after response and
+            safety tokens have been subtracted. If omitted, ``ai_max_tokens``
+            is used for backward compatibility.
+        shortened_prompt_cutoff_tokens: Token threshold for small template.
+        case_dir: Optional case directory path.
+        audit_log_fn: Optional callable ``(action, details)`` for audit.
+        date_range: Optional 2-tuple of ``(start_date_str, end_date_str)``
+            for date-based row filtering.  ``None`` skips date filtering.
+        host_metadata: Optional host metadata mapping with ``hostname``,
+            ``domain``, and ``ips`` keys for populating prompt context.
+        analysis_scope_id: Optional image/scope identifier for collision-safe
+            analysis-input CSV output.
+
+    Returns:
+        An :class:`ArtifactPrepResult` containing the rendered prompt,
+        analysis-input CSV path, AI-visible columns, and canonical
+        parser/data-prep metadata for downstream reports and exports.
+    """
+    prompt_budget_tokens = ai_input_max_tokens if ai_input_max_tokens is not None else ai_max_tokens
+    include_statistics = prompt_budget_tokens >= shortened_prompt_cutoff_tokens
+    template = artifact_prompt_template if include_statistics else artifact_prompt_template_small_context
+
+    rows: list[dict[str, str]] = []
+    columns: list[str] = []
+
+    with csv_path.open("r", newline="", encoding="utf-8-sig", errors="replace") as handle:
+        reader = csv.DictReader(handle)
+        raw_columns = [str(c) for c in (reader.fieldnames or []) if c not in (None, "")]
+        columns, column_renames = _analysis_visible_columns(raw_columns)
+
+        for source_row_count, raw_row in enumerate(reader, start=1):
+            normalized_raw = normalize_csv_row(raw_row, columns=raw_columns)
+            row = {
+                column_renames.get(column, column): stringify_value(normalized_raw.get(column, ""))
+                for column in raw_columns
+            }
+            row["_row_ref"] = str(source_row_count)
+            rows.append(row)
+
+    source_min_time, source_max_time = time_range_for_rows(rows)
+
+    # Date filtering must run against the source schema.  Projection can
+    # intentionally omit timestamp columns from the AI-visible CSV, but that
+    # must not make every row look timestamp-less and survive the filter.
+    pre_filter_count = len(rows)
+    filtered_rows = _filter_by_date_range(rows=rows, date_range=date_range)
+    date_filtered_count = pre_filter_count - len(filtered_rows)
+
+    analysis_columns, projection_applied = select_ai_columns(
+        artifact_key=artifact_key, available_columns=columns,
+        column_projections=artifact_ai_column_projections, audit_log_fn=audit_log_fn,
+    )
+    analysis_rows = project_rows_for_analysis(rows=filtered_rows, columns=analysis_columns)
+    deduplicated_records = 0
+    dedup_annotated_rows = 0
+    dedup_variant_columns: list[str] = []
+    analysis_csv_path = csv_path
+
+    if artifact_deduplication_enabled:
+        analysis_rows, analysis_columns, deduplicated_records, dedup_annotated_rows, dedup_variant_columns = (
+            deduplicate_rows_for_analysis(rows=analysis_rows, columns=analysis_columns)
+        )
+
+    source_rows_by_ref = {row.get("_row_ref", ""): row for row in filtered_rows}
+    source_rows_for_analysis = [
+        source_rows_by_ref.get(row.get("_row_ref", ""), row)
+        for row in analysis_rows
+    ]
+    analysis_min_time, analysis_max_time = time_range_for_rows(source_rows_for_analysis)
+
+    transformed_for_analysis = bool(
+        projection_applied
+        or artifact_deduplication_enabled
+        or date_filtered_count
+    )
+    analysis_csv_path = write_analysis_input_csv(
+        source_csv_path=csv_path,
+        rows=analysis_rows,
+        columns=analysis_columns,
+        case_dir=case_dir,
+        analysis_scope_id=analysis_scope_id,
+    )
+
+    if date_filtered_count and audit_log_fn is not None:
+        feed_details: dict[str, Any] = {
+            "artifact_key": artifact_key,
+            "source_csv": str(csv_path),
+            "analysis_csv": str(analysis_csv_path),
+            "rows_before_date_filter": pre_filter_count,
+            "rows_removed_by_date_filter": date_filtered_count,
+            "rows_after_date_filter": len(filtered_rows),
+        }
+        audit_log_fn("artifact_data_feeding", feed_details)
+
+    if projection_applied and audit_log_fn is not None:
+        projection_details: dict[str, Any] = {
+            "artifact_key": artifact_key, "source_csv": str(csv_path),
+            "analysis_csv": str(analysis_csv_path), "projection_columns": list(analysis_columns),
+        }
+        audit_log_fn("artifact_ai_projection", projection_details)
+
+    if artifact_deduplication_enabled and audit_log_fn is not None:
+        dedup_audit_details: dict[str, Any] = {
+            "artifact_key": artifact_key, "source_csv": str(csv_path),
+            "analysis_csv": str(analysis_csv_path), "removed_records": deduplicated_records,
+            "annotated_rows": dedup_annotated_rows, "variant_columns": list(dedup_variant_columns),
+        }
+        audit_log_fn("artifact_deduplicated", dedup_audit_details)
+
+    statistics = ""
+    if include_statistics:
+        statistics, _projected_min_time, _projected_max_time = compute_statistics(
+            rows=analysis_rows,
+            columns=analysis_columns,
+        )
+        min_time, max_time = analysis_min_time, analysis_max_time
+        stat_lines = statistics.splitlines()
+        if len(stat_lines) >= 3:
+            stat_lines[1] = f"Time range start: {format_datetime(min_time)}"
+            stat_lines[2] = f"Time range end: {format_datetime(max_time)}"
+            statistics = "\n".join(stat_lines)
+        stats_prefix: list[str] = []
+
+        if artifact_deduplication_enabled:
+            dedup_details = [
+                "Artifact deduplication enabled.",
+                f"Rows removed as timestamp/ID-only duplicates: {deduplicated_records}.",
+                f"Rows annotated with deduplication comment: {dedup_annotated_rows}.",
+            ]
+            if dedup_variant_columns:
+                dedup_details.append("Dedup variant columns: " + ", ".join(dedup_variant_columns) + ".")
+            stats_prefix.append("\n".join(dedup_details))
+
+        if projection_applied:
+            stats_prefix.append("AI column projection applied: " + ", ".join(analysis_columns) + ".")
+
+        if stats_prefix:
+            statistics = "\n".join(stats_prefix) + "\n" + statistics
+    else:
+        min_time, max_time = analysis_min_time, analysis_max_time
+
+    full_data_csv = build_full_data_csv(rows=analysis_rows, columns=analysis_columns)
+    extracted_iocs = extract_ioc_targets(investigation_context)
+    priority_directives = build_priority_directives(investigation_context, ioc_targets=extracted_iocs)
+    ioc_targets = format_ioc_targets(investigation_context, ioc_targets=extracted_iocs)
+    artifact_guidance = _resolve_analysis_instructions(
+        artifact_key=artifact_key, artifact_metadata=artifact_metadata,
+        artifact_instruction_prompts=artifact_instruction_prompts,
+    )
+
+    meta = host_metadata if isinstance(host_metadata, Mapping) else {}
+    analysis_time_range_start = format_datetime(min_time)
+    analysis_time_range_end = format_datetime(max_time)
+    source_time_range_start = format_datetime(source_min_time)
+    source_time_range_end = format_datetime(source_max_time)
+
+    replacements = {
+        "priority_directives": priority_directives,
+        "investigation_context": wrap_prompt_section(
+            "investigation_context",
+            investigation_context,
+            default="No investigation context provided.",
+        ),
+        "ioc_targets": ioc_targets,
+        "hostname": str(meta.get("hostname", "Unknown")),
+        "domain": str(meta.get("domain", "Unknown")),
+        "ips": str(meta.get("ips", "Unknown")),
+        "artifact_key": artifact_key,
+        "artifact_name": artifact_metadata.get("name", artifact_key),
+        "artifact_description": artifact_metadata.get("description", "No artifact description available."),
+        "total_records": str(len(analysis_rows)),
+        "time_range_start": analysis_time_range_start,
+        "time_range_end": analysis_time_range_end,
+        "statistics": statistics,
+        "analysis_instructions": wrap_prompt_section(
+            "artifact_guidance",
+            artifact_guidance,
+            default="No artifact-specific guidance provided.",
+        ),
+        "artifact_guidance": wrap_prompt_section(
+            "artifact_guidance",
+            artifact_guidance,
+            default="No artifact-specific guidance provided.",
+        ),
+        "data_csv": full_data_csv,
+    }
+
+    filled = template
+    for placeholder, value in replacements.items():
+        filled = filled.replace(f"{{{{{placeholder}}}}}", value)
+
+    final_context_reminder = build_artifact_final_context_reminder(
+        artifact_key=artifact_key,
+        artifact_name=artifact_metadata.get("name", artifact_key),
+        investigation_context=investigation_context,
+        ioc_targets=extracted_iocs,
+    )
+    if final_context_reminder:
+        filled = f"{filled.rstrip()}\n\n{final_context_reminder}\n"
+
+    metadata: dict[str, Any] = {
+        "source_record_count": len(rows),
+        "analysis_record_count": len(analysis_rows),
+        "record_count": len(analysis_rows),
+        "source_time_range_start": source_time_range_start,
+        "source_time_range_end": source_time_range_end,
+        "analysis_time_range_start": analysis_time_range_start,
+        "analysis_time_range_end": analysis_time_range_end,
+        "time_range_start": analysis_time_range_start,
+        "time_range_end": analysis_time_range_end,
+        "source_csv": str(csv_path),
+        "analysis_csv": str(analysis_csv_path),
+        "analysis_columns": list(analysis_columns),
+        "date_filtered_count": date_filtered_count,
+        "rows_before_date_filter": pre_filter_count,
+        "rows_after_date_filter": len(filtered_rows),
+        "deduplicated_records": deduplicated_records,
+        "dedup_annotated_rows": dedup_annotated_rows,
+        "dedup_variant_columns": list(dedup_variant_columns),
+        "projection_applied": projection_applied,
+        "deduplication_enabled": artifact_deduplication_enabled,
+        "analysis_transformed": transformed_for_analysis,
+    }
+    if analysis_scope_id:
+        metadata["analysis_scope_id"] = analysis_scope_id
+
+    return ArtifactPrepResult(
+        prompt_text=append_analysis_prompt_footer(filled),
+        analysis_csv_path=analysis_csv_path,
+        analysis_columns=list(analysis_columns),
+        metadata=metadata,
+    )
+
+
+def _resolve_analysis_instructions(
+    artifact_key: str,
+    artifact_metadata: Mapping[str, str],
+    artifact_instruction_prompts: dict[str, str],
+) -> str:
+    """Resolve artifact-specific analysis instructions for the AI prompt.
+
+    Args:
+        artifact_key: Artifact identifier.
+        artifact_metadata: Metadata dict for the artifact.
+        artifact_instruction_prompts: Per-artifact instruction overrides.
+
+    Returns:
+        The analysis instruction text.
+    """
+    candidates: list[str] = []
+
+    def add(candidate: str) -> None:
+        clean = candidate.strip().lower()
+        if clean and clean not in candidates:
+            candidates.append(clean)
+
+    add(artifact_key)
+    for candidate in _artifact_lookup_candidates(artifact_key):
+        add(candidate)
+
+    # Try dot/underscore variants so file-stem prompts such as
+    # "ssh_authorized_keys.md" still match dotted artifact keys.
+    for candidate in list(candidates):
+        add(candidate.replace(".", "_"))
+        add(candidate.replace("_", "."))
+
+    for key in candidates:
+        prompt = artifact_instruction_prompts.get(key.strip().lower(), "").strip()
+        if prompt:
+            return prompt
+
+    for field in ("artifact_guidance", "analysis_instructions", "analysis_hint"):
+        value = stringify_value(artifact_metadata.get(field, ""))
+        if value:
+            return value
+
+    return "No specific analysis instructions are available for this artifact."

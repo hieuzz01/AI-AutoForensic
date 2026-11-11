@@ -1,0 +1,1235 @@
+/**
+ * AIFT shared namespace, application state, and utility functions.
+ *
+ * Loaded first — every other module depends on window.AIFT.
+ */
+"use strict";
+
+window.AIFT = (() => {
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const STEP_IDS = ["step-evidence", "step-artifacts", "step-parsing", "step-analysis", "step-results"];
+  const RECOMMENDED_PRESET_EXCLUDED_ARTIFACTS = new Set(["evtx", "mft", "usnjrnl"]);
+  const RECOMMENDED_PRESET_PARSE_ONLY_ARTIFACTS = new Set([]);
+  const MODE_PARSE_AND_AI = "parse_and_ai";
+  const MODE_PARSE_ONLY = "parse_only";
+  const RECOMMENDED_PROFILE = "recommended";
+  function rangeExtensions(prefix, start, end, width) {
+    const values = [];
+    for (let i = start; i <= end; i += 1) values.push(`${prefix}${String(i).padStart(width, "0")}`);
+    return values;
+  }
+  const EVIDENCE_ACCEPT_EXTENSIONS = [
+    ...rangeExtensions(".e", 1, 99, 2),
+    ...rangeExtensions(".E", 1, 99, 2),
+    ...rangeExtensions(".ex", 1, 99, 2),
+    ...rangeExtensions(".EX", 1, 99, 2),
+    ...rangeExtensions(".s", 1, 99, 2),
+    ...rangeExtensions(".S", 1, 99, 2),
+    ...rangeExtensions(".l", 1, 99, 2),
+    ...rangeExtensions(".L", 1, 99, 2),
+    ".dd", ".img", ".raw", ".bin", ".iso",
+    ...rangeExtensions(".", 0, 999, 3),
+    ".vmdk", ".vhd", ".vhdx", ".vdi", ".qcow2", ".hdd", ".hds",
+    ".vmx", ".vmwarevm", ".vbox", ".vmcx", ".ovf", ".ova", ".pvm", ".pvs", ".utm", ".xva", ".vma",
+    ".vbk", ".asdf", ".asif", ".ad1",
+    ".tar", ".gz", ".tgz", ".zip", ".7z",
+  ];
+  const EVIDENCE_ACCEPT = EVIDENCE_ACCEPT_EXTENSIONS.join(",");
+  const DROP_HELP = "Drag and drop evidence here (.E01-.E99, .dd, .raw, .vmdk, .vhd, .vhdx, .vdi, .qcow2, .zip, .7z, .tar, ...). For split sets that continue past .E99 (.EAA and beyond), use Local Path or Scan Directory mode.";
+  // JS copy of the canonical CONFIDENCE_PATTERN in app/reporter/markdown.py;
+  // keep both in sync.
+  const CONFIDENCE_TOKEN_PATTERN = /\bconfidence\b(?:\s+level)?\s*(?::|=|-|\bis\b)?\s*(?:\*\*|__|\*|_|`|<strong>|<em>|<code>)*(CRITICAL|HIGH|MEDIUM|LOW)(?![A-Za-z0-9])(?:\*\*|__|\*|_|`|<\/strong>|<\/em>|<\/code>)*/gi;
+  const AI_MAX_TOKENS_WARNING_THRESHOLD = 32000;
+  const CONFIDENCE_CLASS_MAP = {
+    CRITICAL: "confidence-critical",
+    HIGH: "confidence-high",
+    MEDIUM: "confidence-medium",
+    LOW: "confidence-low",
+  };
+  const SSE_MAX_RETRIES = 10;
+  const SSE_RETRY_BASE_DELAY_MS = 1000;
+  const SSE_RETRY_MAX_DELAY_MS = 30000;
+  const FETCH_TIMEOUT_API_MS = 60000;
+  const FETCH_TIMEOUT_UPLOAD_MS = 240000;
+
+  // ── Application state ──────────────────────────────────────────────────────
+  const st = {
+    step: 1,
+    caseId: "",
+    caseName: "",
+    artifacts: [],
+    artifactNames: {},
+    selected: [],
+    selectedAi: [],
+    parsedSelections: { caseId: "", runId: "", mode: "", artifactOptions: [], artifacts: [], aiArtifacts: [], images: {} },
+    profiles: [],
+    settings: null,
+    settingsTab: "basic",
+    parse: { run: false, done: false, fail: false, selectionStale: false, es: null, retry: null, retryCount: 0, seq: -1, rows: {}, status: {}, timer: null, started: 0, abort: null, cancelPending: null, owner: null, imageId: "", pendingSelectionSnapshot: null },
+    analysis: { run: false, done: false, fail: false, es: null, retry: null, retryCount: 0, seq: -1, order: [], byKey: {}, summary: "", model: {}, timer: null, started: 0, abort: null, cancelPending: null, owner: null },
+    chat: {
+      run: false,
+      es: null,
+      postAbort: null,
+      historyAbort: null,
+      clearAbort: null,
+      owner: null,
+      historyOwner: null,
+      clearOwner: null,
+      retry: null,
+      retryCount: 0,
+      seq: -1,
+      pending: null,
+      historyLoadedCaseId: "",
+      activityEpoch: 0,
+    },
+    evidence: { runId: "", abort: null, scanRunId: "", scanAbort: null },
+  };
+
+  let csrfToken = "";
+  let frontendRunCounter = 0;
+
+  const el = {};
+  const q = (id) => document.getElementById(id);
+
+  // ── Fetch with timeout ─────────────────────────────────────────────────────
+
+  /**
+   * Perform a fetch request with an automatic timeout.
+   *
+   * Wraps the native `fetch` with an AbortController that fires after
+   * `timeoutMs` milliseconds.  If an external signal is supplied via
+   * `init.signal`, it is chained so that either signal can abort the request.
+   *
+   * @param {string} url - Request URL.
+   * @param {RequestInit} [init={}] - Standard fetch init options.
+   * @param {number} [timeoutMs=FETCH_TIMEOUT_API_MS] - Timeout in ms; 0 disables.
+   * @returns {Promise<Response>} The fetch Response.
+   * @throws {Error} With name "TimeoutError" when the timeout fires.
+   */
+  async function fetchWithTimeout(url, init = {}, timeoutMs = FETCH_TIMEOUT_API_MS) {
+    const controller = new AbortController();
+    let timedOut = false;
+
+    if (init.signal) {
+      if (init.signal.aborted) {
+        controller.abort(init.signal.reason);
+      } else {
+        init.signal.addEventListener("abort", () => controller.abort(init.signal.reason), { once: true });
+      }
+    }
+
+    const timer = timeoutMs > 0
+      ? window.setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs)
+      : null;
+
+    try {
+      return await fetch(url, Object.assign({}, init, { signal: controller.signal }));
+    } catch (e) {
+      if (e.name === "AbortError" && timedOut) {
+        const err = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+        err.name = "TimeoutError";
+        throw err;
+      }
+      throw e;
+    } finally {
+      if (timer) window.clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Derive a user-friendly error message from a failed fetch.
+   *
+   * @param {Error} error - The caught error from fetchWithTimeout.
+   * @param {string} url - The URL that was being fetched (for context).
+   * @returns {string} Human-readable error description.
+   */
+  function handleFetchError(error, url) {
+    if (error.name === "TimeoutError") {
+      return `Request to ${url} timed out. The server may be busy \u2014 please try again.`;
+    }
+    if (error.name === "AbortError") {
+      return "Request was cancelled.";
+    }
+    if (error instanceof TypeError || /network|failed to fetch/i.test(error.message)) {
+      return "Network error: unable to reach the server. Check your connection and ensure AIFT is running.";
+    }
+    return error.message || `Request to ${url} failed.`;
+  }
+
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+
+  /** Fetch the CSRF token from the server and cache it (best-effort). */
+  async function fetchCsrfToken() {
+    try {
+      const r = await fetchWithTimeout("/api/csrf-token", { method: "GET" });
+      if (r.ok) {
+        const data = await r.json();
+        csrfToken = data.csrf_token || "";
+      }
+    } catch (_e) { /* CSRF fetch is best-effort */ }
+  }
+
+  // ── Case ID helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Persist a case ID into application state and the wizard DOM element.
+   *
+   * @param {string} rawCaseId - The raw case identifier to store.
+   * @returns {string} The trimmed case ID that was set.
+   */
+  function setCaseId(rawCaseId) {
+    const caseId = String(rawCaseId || "").trim();
+    const changed = st.caseId !== caseId;
+    st.caseId = caseId;
+    if (el.wizard) {
+      if (caseId) el.wizard.dataset.caseId = caseId;
+      else delete el.wizard.dataset.caseId;
+    }
+    if (changed && window.AIFT && typeof window.AIFT.invalidateChatActivity === "function") {
+      window.AIFT.invalidateChatActivity();
+    }
+    return st.caseId;
+  }
+
+  /**
+   * Return the current case ID from state, falling back to the DOM attribute.
+   *
+   * @returns {string} The active case ID, or empty string if none is set.
+   */
+  function activeCaseId() {
+    if (st.caseId) return st.caseId;
+    const domCaseId = el.wizard ? String(el.wizard.dataset.caseId || "").trim() : "";
+    if (domCaseId) return setCaseId(domCaseId);
+    return "";
+  }
+
+  /**
+   * Create a small immutable owner token for async frontend work.
+   *
+   * @param {string} caseId - Case ID the work belongs to.
+   * @param {string} [kind="run"] - Human-readable token prefix.
+   * @returns {{caseId: string, runId: string}}
+   */
+  function newRunOwner(caseId, kind = "run") {
+    frontendRunCounter += 1;
+    return {
+      caseId: String(caseId || "").trim(),
+      runId: `${kind}-${Date.now()}-${frontendRunCounter}`,
+    };
+  }
+
+  /**
+   * Check whether a captured owner token still owns a channel.
+   *
+   * When no owner is supplied the check is permissive so legacy unit tests
+   * can call event handlers directly.
+   *
+   * @param {Object} channel - State object with an owner property.
+   * @param {{caseId: string, runId: string}|null} owner - Captured owner.
+   * @returns {boolean}
+   */
+  function isRunOwnerCurrent(channel, owner) {
+    if (!owner) return true;
+    const current = channel && channel.owner;
+    return !!(
+      current
+      && current.caseId === owner.caseId
+      && current.runId === owner.runId
+      && owner.caseId === activeCaseId()
+    );
+  }
+
+  /** Mark parsed artifact selections stale after a completed parse is edited. */
+  function markParsedSelectionStale() {
+    if (!st.parse || !st.parse.done || st.parse.run) return false;
+    st.parse.selectionStale = true;
+    return true;
+  }
+
+  /** Reset the stored successful parse-selection snapshot. */
+  function clearParsedSelections() {
+    st.parsedSelections = { caseId: "", runId: "", mode: "", artifactOptions: [], artifacts: [], aiArtifacts: [], images: {} };
+  }
+
+  /** Ensure the evidence operation state exists, including in older tests. */
+  function ensureEvidenceState() {
+    if (!st.evidence) st.evidence = { runId: "", abort: null, scanRunId: "", scanAbort: null };
+    return st.evidence;
+  }
+
+  /** Abort and invalidate active evidence submit or scan operations. */
+  function abortEvidenceOperations() {
+    const evidence = ensureEvidenceState();
+    if (evidence.abort) {
+      evidence.abort.abort();
+      evidence.abort = null;
+      evidence.runId = newRunOwner("", "evidence-invalid").runId;
+    }
+    if (evidence.scanAbort) {
+      evidence.scanAbort.abort();
+      evidence.scanAbort = null;
+      evidence.scanRunId = newRunOwner("", "scan-invalid").runId;
+    }
+  }
+
+  /**
+   * Start an evidence submit or scan operation, retiring any older operation.
+   *
+   * @param {"submit"|"scan"} kind - Operation kind.
+   * @returns {{kind: string, runId: string, controller: AbortController, signal: AbortSignal}}
+   */
+  function beginEvidenceOperation(kind) {
+    abortEvidenceOperations();
+    const evidence = ensureEvidenceState();
+    const opKind = kind === "scan" ? "scan" : "submit";
+    const controller = new AbortController();
+    const runId = newRunOwner(activeCaseId(), `evidence-${opKind}`).runId;
+    if (opKind === "scan") {
+      evidence.scanRunId = runId;
+      evidence.scanAbort = controller;
+    } else {
+      evidence.runId = runId;
+      evidence.abort = controller;
+    }
+    return { kind: opKind, runId, controller, signal: controller.signal };
+  }
+
+  /**
+   * Return whether an evidence operation token still owns its async flow.
+   *
+   * @param {Object} token - Token returned by beginEvidenceOperation().
+   * @returns {boolean}
+   */
+  function isEvidenceOperationCurrent(token) {
+    if (!token) return false;
+    const evidence = ensureEvidenceState();
+    if (token.kind === "scan") {
+      return evidence.scanRunId === token.runId && evidence.scanAbort === token.controller && !token.signal.aborted;
+    }
+    return evidence.runId === token.runId && evidence.abort === token.controller && !token.signal.aborted;
+  }
+
+  /** Clear an operation's active controller if it is still current. */
+  function finishEvidenceOperation(token) {
+    if (!isEvidenceOperationCurrent(token)) return false;
+    const evidence = ensureEvidenceState();
+    if (token.kind === "scan") evidence.scanAbort = null;
+    else evidence.abort = null;
+    return true;
+  }
+
+  // ── Message helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Ensure a status-message paragraph element exists inside a parent.
+   *
+   * If an element with the given `id` already exists in the DOM it is
+   * returned as-is; otherwise a new hidden `<p>` is created and appended.
+   *
+   * @param {HTMLElement} parent - Container to append the element into.
+   * @param {string} id - DOM id for the message element.
+   * @returns {HTMLElement} The message paragraph node.
+   */
+  function ensureMsg(parent, id) {
+    let node = q(id);
+    if (!node) {
+      node = document.createElement("p");
+      node.id = id;
+      node.hidden = true;
+      node.setAttribute("role", "alert");
+      parent.appendChild(node);
+    }
+    return node;
+  }
+
+  /**
+   * Display a status message in a message node.
+   *
+   * @param {HTMLElement|null} node - The message element (from ensureMsg).
+   * @param {string} text - Message content; falsy clears the message.
+   * @param {string} [kind="info"] - One of "info", "warning", "error", or "success".
+   */
+  function setMsg(node, text, kind = "info") {
+    if (!node) return;
+    if (!text) return clearMsg(node);
+    node.hidden = false;
+    node.textContent = text;
+    let status = "in-progress";
+    if (kind === "error") status = "failed";
+    else if (kind === "success") status = "success";
+    else if (kind === "warning") status = "warning";
+    node.dataset.status = status;
+  }
+
+  /** Hide and clear a status-message node. @param {HTMLElement|null} node */
+  function clearMsg(node) {
+    if (!node) return;
+    node.hidden = true;
+    node.textContent = "";
+    delete node.dataset.status;
+  }
+
+  // ── Timer helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Ensure an elapsed-time paragraph element exists in a step container.
+   *
+   * @param {HTMLElement|null} container - Wizard step element.
+   * @param {string} id - DOM id for the timer element.
+   * @returns {HTMLElement} The timer paragraph node (initially hidden).
+   */
+  function ensureTimer(container, id) {
+    let n = q(id);
+    if (!n) {
+      n = document.createElement("p");
+      n.id = id;
+      n.textContent = "Elapsed: 00:00";
+      const h = container ? container.querySelector("h2") : null;
+      if (container && h) container.insertBefore(n, h.nextSibling);
+      else if (container) container.appendChild(n);
+    }
+    n.hidden = true;
+    return n;
+  }
+
+  /**
+   * Start an elapsed-time ticker for parse or analysis.
+   *
+   * @param {string} kind - Either "parse" or "analysis".
+   */
+  function startTimer(kind) {
+    const node = kind === "parse" ? el.parseElapsed : el.analysisElapsed;
+    const tgt = kind === "parse" ? st.parse : st.analysis;
+    stopTimer(kind);
+    if (!node || !tgt) return;
+    tgt.started = Date.now();
+    node.hidden = false;
+    const tick = () => { node.textContent = `Elapsed: ${fmtElapsed(tgt.started)}`; };
+    tick();
+    tgt.timer = window.setInterval(tick, 1000);
+  }
+
+  /** Stop the elapsed-time ticker for parse or analysis. @param {string} kind */
+  function stopTimer(kind) {
+    const tgt = kind === "parse" ? st.parse : st.analysis;
+    if (tgt && tgt.timer) {
+      window.clearInterval(tgt.timer);
+      tgt.timer = null;
+    }
+  }
+
+  // ── SSE helpers (shared across parse / analysis / chat) ────────────────────
+
+  /**
+   * Compute exponential-backoff delay for an SSE reconnection attempt.
+   *
+   * @param {number} attempt - 1-based attempt counter.
+   * @returns {number} Delay in milliseconds, capped at SSE_RETRY_MAX_DELAY_MS.
+   */
+  function sseRetryDelayMs(attempt) {
+    const normalizedAttempt = Number.isFinite(attempt) ? Math.max(1, Math.floor(attempt)) : 1;
+    const backoff = SSE_RETRY_BASE_DELAY_MS * (2 ** (normalizedAttempt - 1));
+    return Math.min(SSE_RETRY_MAX_DELAY_MS, backoff);
+  }
+
+  /**
+   * Close an SSE channel, aborting any pending request and clearing timers.
+   *
+   * @param {Object} channel - State object with optional abort, retry, and es
+   *     properties.
+   */
+  function closeSseChannel(channel) {
+    if (channel.abort) {
+      channel.abort.abort();
+      channel.abort = null;
+    }
+    if (channel.retry) {
+      window.clearTimeout(channel.retry);
+      channel.retry = null;
+    }
+    if (channel.es) {
+      channel.es.close();
+      channel.es = null;
+    }
+  }
+
+  /**
+   * Require named AIFT module exports to be registered before startup.
+   *
+   * @param {string[]} names - Public function names expected on AIFT.
+   * @returns {true} True when all names are present.
+   * @throws {Error} When any required export is missing.
+   */
+  function requireModules(names) {
+    const missing = (Array.isArray(names) ? names : [])
+      .filter((name) => typeof window.AIFT[name] !== "function");
+    if (missing.length) {
+      throw new Error(`AIFT startup contract missing module exports: ${missing.join(", ")}`);
+    }
+    return true;
+  }
+
+  function renderedValueOrFallback(value, fallback) {
+    const rendered = String(value || "").trim();
+    return rendered && !/\{\{/.test(rendered) ? rendered : fallback;
+  }
+
+  /** Return rendered backend evidence metadata when available. */
+  function evidenceFormatMetadata() {
+    const body = document.body || {};
+    const dataset = body.dataset || {};
+    const input = document.querySelector(".image-file-input");
+    const help = document.querySelector(".image-dropzone-help");
+    const bodyAccept = renderedValueOrFallback(dataset.evidenceAccept, "");
+    const inputAccept = renderedValueOrFallback(input ? input.getAttribute("accept") : "", "");
+    const bodyHelp = renderedValueOrFallback(dataset.evidenceHelp, "");
+    const inputHelp = renderedValueOrFallback(help ? help.textContent : "", "");
+    return {
+      accept: bodyAccept || inputAccept || EVIDENCE_ACCEPT,
+      help: bodyHelp || inputHelp || DROP_HELP,
+    };
+  }
+
+  /** Apply central evidence-format metadata to file inputs and help text. */
+  function applyEvidenceFormatMetadata(root = document) {
+    if (!root) return;
+    const metadata = evidenceFormatMetadata();
+    const scope = root.querySelectorAll ? root : document;
+    scope.querySelectorAll(".image-file-input").forEach((input) => {
+      input.setAttribute("accept", metadata.accept);
+    });
+    scope.querySelectorAll(".image-dropzone-help").forEach((help) => {
+      if (!help.textContent || help.textContent === DROP_HELP || /Drag and drop evidence here|\{\{\s*evidence_ui_help\s*\}\}/.test(help.textContent)) {
+        help.textContent = metadata.help;
+      }
+    });
+  }
+
+  // ── Network ────────────────────────────────────────────────────────────────
+
+  /**
+   * Make a JSON-capable API request with CSRF, timeout, and error handling.
+   *
+   * Automatically attaches the CSRF token for mutating methods, serialises
+   * a `json` option as JSON body, and parses the response.
+   *
+   * @param {string} url - API endpoint URL.
+   * @param {Object} [opts={}] - Options.
+   * @param {string} [opts.method="GET"] - HTTP method.
+   * @param {Object} [opts.json] - Body to serialise as JSON.
+   * @param {BodyInit} [opts.body] - Raw body (FormData, string, etc.).
+   * @param {AbortSignal} [opts.signal] - Optional abort signal.
+   * @param {number} [opts.timeout] - Override timeout in ms.
+   * @param {Object} [opts.headers] - Additional request headers.
+   * @returns {Promise<Object|string>} Parsed JSON object or response text.
+   * @throws {Error} On non-2xx status or network failure.
+   */
+  async function apiJson(url, opts = {}) {
+    const headers = Object.assign({}, opts.headers || {});
+    const method = opts.method || "GET";
+    if (csrfToken && method !== "GET" && method !== "HEAD") {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+    const init = { method, headers };
+    if (opts.signal) init.signal = opts.signal;
+    if (Object.prototype.hasOwnProperty.call(opts, "json")) {
+      headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(opts.json);
+    } else if (Object.prototype.hasOwnProperty.call(opts, "body")) {
+      init.body = opts.body;
+      if (init.body instanceof FormData) delete headers["Content-Type"];
+    }
+    const timeoutMs = typeof opts.timeout === "number" ? opts.timeout : FETCH_TIMEOUT_API_MS;
+    let r;
+    try {
+      r = await fetchWithTimeout(url, init, timeoutMs);
+    } catch (e) {
+      if (e.name === "AbortError") throw e;
+      throw new Error(handleFetchError(e, url));
+    }
+    const ct = r.headers.get("content-type") || "";
+    const payload = ct.includes("application/json")
+      ? await r.json().catch(() => null)
+      : ((await r.text().catch(() => "")) || "");
+    if (!r.ok) {
+      const m = payload && typeof payload === "object"
+        ? (payload.error || payload.message)
+        : payload;
+      throw new Error(m || `Request failed with status ${r.status}.`);
+    }
+    return payload;
+  }
+
+  /**
+   * Extract an error message string from a non-ok Response.
+   *
+   * @param {Response} r - The fetch Response object.
+   * @returns {Promise<string>} The extracted error text.
+   */
+  async function readErr(r) {
+    const ct = r.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const p = await r.json().catch(() => null);
+      if (p && typeof p === "object") return p.error || p.message || "";
+      return "";
+    }
+    return r.text().catch(() => "");
+  }
+
+  // ── Pure utilities ─────────────────────────────────────────────────────────
+
+  /** Return the display name for an artifact key. @param {string} k */
+  function artifactName(k) {
+    return st.artifactNames[k] || k;
+  }
+
+  /**
+   * Escape an arbitrary value for use inside a CSS selector.
+   *
+   * Uses the browser-native CSS.escape when present, with a local fallback for
+   * embedded webviews and older browsers.
+   *
+   * @param {*} value - Value to escape.
+   * @returns {string} CSS selector-safe string.
+   */
+  function cssEscape(value) {
+    const text = String(value == null ? "" : value);
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(text);
+    }
+    return text.replace(/[\0-\x1f\x7f]|^-?\d|^-$|[^\w-]/g, (ch, offset) => {
+      if (ch === "\0") return "\uFFFD";
+      const code = ch.charCodeAt(0).toString(16).toUpperCase();
+      if (/[\0-\x1f\x7f]/.test(ch) || (offset === 0 && /^-?\d/.test(text)) || (offset === 1 && text.charAt(0) === "-" && /\d/.test(ch))) {
+        return `\\${code} `;
+      }
+      return `\\${ch}`;
+    });
+  }
+
+  /**
+   * Format a byte count as a human-readable string (e.g. "1.5 MB").
+   *
+   * @param {number} b - Byte count.
+   * @returns {string} Formatted size string.
+   */
+  function fmtBytes(b) {
+    if (!Number.isFinite(b) || b < 0) return "0 B";
+    if (b < 1024) return `${b} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let v = b / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i += 1;
+    }
+    return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
+  }
+
+  /**
+   * Format a number using locale conventions without grouping separators.
+   *
+   * @param {number} v - The value to format.
+   * @param {number} [max=3] - Maximum fraction digits.
+   * @returns {string} Formatted number string, or "" if not finite.
+   */
+  function fmtNumber(v, max = 3) {
+    return Number.isFinite(v)
+      ? v.toLocaleString(undefined, { maximumFractionDigits: max, minimumFractionDigits: 0, useGrouping: false })
+      : "";
+  }
+
+  /** Parse a JSON string, returning null on failure. @param {string} t */
+  function safeJson(t) {
+    if (typeof t !== "string" || !t) return null;
+    try {
+      return JSON.parse(t);
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  /** Escape HTML special characters for safe insertion into markup. @param {*} value */
+  function escapeHtml(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  /** Return the trimmed value of a form input element. @param {HTMLInputElement|null} input */
+  function val(input) {
+    return input ? String(input.value || "").trim() : "";
+  }
+
+  /**
+   * Coerce a value to a finite number, returning a fallback otherwise.
+   *
+   * @param {*} v - Value to coerce.
+   * @param {*} fallback - Returned when `v` is null, undefined, empty, or NaN.
+   * @returns {number|*} The parsed number, or `fallback`.
+   */
+  function num(v, fallback) {
+    if (v === null || v === undefined || v === "") return fallback;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  /** Check if a value is a plain object (not null, not an array). @param {*} v */
+  function isObj(v) {
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+  }
+
+  /** Return `v` if it is a plain object, otherwise an empty object. @param {*} v */
+  function obj(v) {
+    return isObj(v) ? v : {};
+  }
+
+  /** Deep-clone a value via structuredClone (with JSON fallback). @param {*} v */
+  function clone(v) {
+    if (typeof structuredClone === "function") return structuredClone(v);
+    try {
+      return JSON.parse(JSON.stringify(v));
+    } catch (_e) {
+      return {};
+    }
+  }
+
+  /** Map a UI provider name (e.g. "anthropic") to the backend key (e.g. "claude"). */
+  function toBackendProvider(ui) {
+    if (ui === "anthropic") return "claude";
+    if (ui === "kimi") return "kimi";
+    if (ui === "local") return "local";
+    return "openai";
+  }
+
+  /** Map a backend provider key (e.g. "claude") to the UI name (e.g. "anthropic"). */
+  function toUiProvider(back) {
+    if (back === "claude") return "anthropic";
+    if (back === "kimi") return "kimi";
+    if (back === "local") return "local";
+    return "openai";
+  }
+
+  /** Normalise a provider string to one of "claude", "openai", "kimi", "local", or "". */
+  function normProvider(p) {
+    const x = String(p || "").trim().toLowerCase();
+    if (x === "anthropic") return "claude";
+    if (x === "claude" || x === "openai" || x === "kimi" || x === "local") return x;
+    return "";
+  }
+
+  /** Return a human-readable label for a provider key (e.g. "Claude", "OpenAI"). */
+  function prettyProvider(p) {
+    const x = normProvider(p);
+    if (x === "claude") return "Claude";
+    if (x === "openai") return "OpenAI";
+    if (x === "kimi") return "Kimi";
+    if (x === "local") return "Local";
+    return p || "Unknown";
+  }
+
+  /**
+   * Strip leading `<think>`/`<reasoning>` XML blocks and code-fenced reasoning
+   * from AI output so the user sees only the final answer.
+   *
+   * @param {string} text - Raw AI response text.
+   * @returns {string} Cleaned text with reasoning blocks removed.
+   */
+  function stripLeadingReasoningBlocks(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const cleaned = raw.replace(
+      /^(?:\s*(?:<\s*(?:think|thinking|reasoning)\b[^>]*>[\s\S]*?<\s*\/\s*(?:think|thinking|reasoning)\s*>|```(?:think|thinking|reasoning)[^\n]*\n[\s\S]*?```)\s*)+/i,
+      "",
+    );
+    return cleaned.trim();
+  }
+
+  /**
+   * Extract a filename from a Content-Disposition header.
+   *
+   * Supports both RFC 5987 `filename*=UTF-8''...` and the plain
+   * `filename="..."` forms.
+   *
+   * @param {Headers} headers - Response headers object.
+   * @returns {string} Extracted filename, or "".
+   */
+  function getFilename(headers) {
+    const cd = headers.get("content-disposition") || headers.get("Content-Disposition") || "";
+    if (!cd) return "";
+    const utf = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf && utf[1]) {
+      try {
+        return decodeURIComponent(utf[1].trim());
+      } catch (_err) {
+        return utf[1].trim();
+      }
+    }
+    const plain = cd.match(/filename="?([^";]+)"?/i);
+    return plain && plain[1] ? plain[1].trim() : "";
+  }
+
+  /**
+   * Coerce a value to boolean, accepting string representations like
+   * "true"/"false", "1"/"0", "yes"/"no".
+   *
+   * @param {*} value - The value to coerce.
+   * @param {boolean} [fallback=false] - Default when value is unrecognised.
+   * @returns {boolean}
+   */
+  function boolSetting(value, fallback = false) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+      if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+    }
+    return fallback;
+  }
+
+  /**
+   * Format elapsed time since a given start timestamp as "MM:SS".
+   *
+   * @param {number} startedAt - Timestamp from Date.now() when the timer started.
+   * @returns {string} Formatted elapsed time string (e.g. "01:23").
+   */
+  function fmtElapsed(startedAt) {
+    const s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  /**
+   * Create an element with common text, class, dataset, and attribute options.
+   *
+   * @param {string} tagName - DOM tag name to create.
+   * @param {Object} [options={}] - Element options.
+   * @param {string} [options.className] - CSS class string.
+   * @param {string} [options.text] - Text content.
+   * @param {Object} [options.attrs] - Attribute map.
+   * @param {Object} [options.dataset] - Dataset map.
+   * @param {Object} [options.props] - Property map.
+   * @param {Array<Node|string>} [children=[]] - Child nodes or text.
+   * @returns {HTMLElement} The created element.
+   */
+  function createDomElement(tagName, options = {}, children = []) {
+    const node = document.createElement(tagName);
+    if (options.className) node.className = String(options.className);
+    if (Object.prototype.hasOwnProperty.call(options, "text")) {
+      node.textContent = String(options.text == null ? "" : options.text);
+    }
+    Object.entries(obj(options.attrs)).forEach(([name, value]) => {
+      if (value == null || value === false) return;
+      if (isUnsafeDomAttribute(name, value)) return;
+      node.setAttribute(name, String(value));
+    });
+    Object.entries(obj(options.dataset)).forEach(([name, value]) => {
+      if (value == null) return;
+      node.dataset[name] = String(value);
+    });
+    Object.entries(obj(options.props)).forEach(([name, value]) => {
+      if (isUnsafeDomProperty(name)) return;
+      node[name] = value;
+    });
+    const list = Array.isArray(children) ? children : [children];
+    list.forEach((child) => {
+      if (child == null) return;
+      node.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
+    });
+    return node;
+  }
+
+  /** Return true for attributes that would reintroduce HTML execution paths. */
+  function isUnsafeDomAttribute(name, value) {
+    const attr = String(name || "").trim().toLowerCase();
+    if (!attr) return true;
+    if (attr.startsWith("on")) return true;
+    if ((attr === "href" || attr === "src" || attr === "xlink:href") && /^\s*javascript:/i.test(String(value || ""))) {
+      return true;
+    }
+    return false;
+  }
+
+  /** Return true for properties that bypass textContent/createElement safety. */
+  function isUnsafeDomProperty(name) {
+    const prop = String(name || "").trim().toLowerCase();
+    return prop === "innerhtml" || prop === "outerhtml";
+  }
+
+  /** Build a definition list from label/value pairs. */
+  function createDefinitionList(rows) {
+    const dl = createDomElement("dl");
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const label = Array.isArray(row) ? row[0] : row.label;
+      const value = Array.isArray(row) ? row[1] : row.value;
+      const valueClass = Array.isArray(row) ? row[2] : row.className;
+      dl.appendChild(createDomElement("dt", { text: label }));
+      dl.appendChild(createDomElement("dd", { className: valueClass || "", text: value }));
+    });
+    return dl;
+  }
+
+  /** Build the reusable evidence metadata card used by image and summary views. */
+  function createEvidenceSummaryCard({
+    title = "Evidence Summary",
+    hostname = "-",
+    os = "-",
+    domain = "-",
+    ips = "-",
+    sha256 = "-",
+    className = "summary-card",
+    hidden = false,
+    valueClasses = {},
+  } = {}) {
+    const article = createDomElement("article", {
+      className,
+      props: { hidden: Boolean(hidden) },
+    });
+    article.appendChild(createDomElement("h4", { text: title }));
+    article.appendChild(createDefinitionList([
+      ["Hostname", hostname || "-", valueClasses.hostname],
+      ["OS", os || "-", valueClasses.os],
+      ["Domain", domain || "-", valueClasses.domain],
+      ["IPs", ips || "-", valueClasses.ips],
+      ["SHA-256", sha256 || "-", valueClasses.sha256],
+    ]));
+    return article;
+  }
+
+  /** Build a multi-image intake form card without template-string HTML. */
+  function createImageFormCard(index, displayNumber) {
+    const uploadRadioName = `evidence_mode_${index}`;
+    const uploadRadio = createDomElement("input", {
+      className: "image-mode-upload",
+      attrs: { name: uploadRadioName, type: "radio", value: "upload" },
+    });
+    const pathRadio = createDomElement("input", {
+      className: "image-mode-path",
+      attrs: { name: uploadRadioName, type: "radio", value: "path" },
+      props: { checked: true },
+    });
+    const fileInput = createDomElement("input", {
+      className: "image-file-input",
+      attrs: { type: "file", multiple: "" },
+    });
+    const card = createDomElement("div", {
+      className: "image-form-card",
+      dataset: { imageIndex: index },
+    });
+
+    card.appendChild(createDomElement("div", { className: "image-form-header" }, [
+      createDomElement("h3", { className: "image-form-title", text: `Image ${displayNumber}` }),
+      createDomElement("button", {
+        className: "image-remove-btn",
+        text: "Remove",
+        attrs: { type: "button" },
+        dataset: { imageIndex: index },
+      }),
+    ]));
+    card.appendChild(createDomElement("div", { className: "form-row" }, [
+      createDomElement("label", { text: "Label (optional)" }),
+      createDomElement("input", {
+        className: "image-label-input",
+        attrs: {
+          type: "text",
+          placeholder: "e.g. Workstation-PC01",
+          autocomplete: "off",
+          spellcheck: "false",
+        },
+      }),
+    ]));
+    card.appendChild(createDomElement("fieldset", { className: "mode-toggle" }, [
+      createDomElement("legend", { text: "Evidence source" }),
+      createDomElement("label", {}, [uploadRadio, " Upload File"]),
+      createDomElement("label", {}, [pathRadio, " Local Path"]),
+    ]));
+    card.appendChild(createDomElement("section", {
+      className: "image-upload-panel",
+      dataset: { mode: "upload" },
+      props: { hidden: true },
+    }, [
+      createDomElement("h4", { text: "Upload File" }),
+      createDomElement("label", { className: "image-dropzone" }, [
+        createDomElement("span", { className: "image-dropzone-help" }),
+        fileInput,
+      ]),
+    ]));
+    card.appendChild(createDomElement("section", {
+      className: "image-path-panel",
+      dataset: { mode: "path" },
+    }, [
+      createDomElement("h4", { text: "Local Path" }),
+      createDomElement("label", { text: "Filesystem path" }),
+      createDomElement("input", {
+        className: "image-path-input",
+        attrs: {
+          type: "text",
+          placeholder: "C:\\Evidence\\disk-image.E01 (or .dd, .vmdk, .vhd, .qcow2, folder, ...)",
+          autocomplete: "off",
+          spellcheck: "false",
+        },
+      }),
+      createDomElement("p", {
+        className: "path-mode-hint",
+        text: "Evidence files (E01, VMDK, VHD, DD, etc.) are read in-place (read-only) - nothing is copied. Archives (ZIP, 7z, tar) are copied and extracted into the case folder first.",
+      }),
+    ]));
+    card.appendChild(createEvidenceSummaryCard({
+      className: "image-metadata-card summary-card",
+      hidden: true,
+      valueClasses: {
+        hostname: "image-sum-hostname",
+        os: "image-sum-os",
+        domain: "image-sum-domain",
+        ips: "image-sum-ips",
+        sha256: "image-sum-sha256",
+      },
+    }));
+    card.appendChild(createDomElement("p", {
+      className: "image-status-msg",
+      attrs: { role: "alert" },
+      props: { hidden: true },
+    }));
+    return card;
+  }
+
+  /** Build an artifact mode select with the standard two mode options. */
+  function createArtifactModeSelect(artifactKey, selectedMode = MODE_PARSE_AND_AI) {
+    const select = createDomElement("select", {
+      className: "artifact-mode-select",
+      dataset: { artifactKey },
+      attrs: { "aria-label": "Artifact parse mode" },
+    });
+    select.appendChild(createDomElement("option", {
+      text: "Parse and use in AI",
+      attrs: { value: MODE_PARSE_AND_AI },
+      props: { selected: selectedMode === MODE_PARSE_AND_AI },
+    }));
+    select.appendChild(createDomElement("option", {
+      text: "Parse only",
+      attrs: { value: MODE_PARSE_ONLY },
+      props: { selected: selectedMode === MODE_PARSE_ONLY },
+    }));
+    select.value = selectedMode === MODE_PARSE_ONLY ? MODE_PARSE_ONLY : MODE_PARSE_AND_AI;
+    return select;
+  }
+
+  /** Build a parse progress row and return the row plus mutable cells. */
+  function createParseProgressRow(artifactKey, artifactLabel, status = "waiting", records = "0") {
+    const tr = createDomElement("tr", { dataset: artifactKey ? { artifactKey } : {} });
+    const tdA = createDomElement("td", { text: artifactLabel || "Awaiting selection" });
+    const tdS = createDomElement("td", { text: status || "waiting" });
+    const tdR = createDomElement("td", { text: records == null ? "0" : String(records) });
+    tr.appendChild(tdA);
+    tr.appendChild(tdS);
+    tr.appendChild(tdR);
+    return { tr, tdS, tdR };
+  }
+
+  /** Build the standard parse progress table header. */
+  function createParseProgressTableHead() {
+    const thead = createDomElement("thead");
+    const tr = createDomElement("tr");
+    ["Artifact", "Status", "Records"].forEach((label) => {
+      tr.appendChild(createDomElement("th", { text: label }));
+    });
+    thead.appendChild(tr);
+    return thead;
+  }
+
+  /** Build the GUI-only reasoning panel used by analysis and findings cards. */
+  function createReasoningPanel(reasoningText) {
+    const value = String(reasoningText || "");
+    if (!value) return null;
+    return createDomElement("details", { className: "analysis-reasoning-panel" }, [
+      createDomElement("summary", { text: "Reasoning" }),
+      createDomElement("pre", { className: "analysis-reasoning-text", text: value }),
+    ]);
+  }
+
+  /** Render Markdown through the centralized renderer when it is available. */
+  function renderMarkdownContent(container, text, emptyText) {
+    if (window.AIFT && typeof window.AIFT.renderMarkdownInto === "function") {
+      window.AIFT.renderMarkdownInto(container, text, emptyText);
+      return;
+    }
+    container.textContent = String(text || "").trim() || String(emptyText || "");
+  }
+
+  /** Build an analysis result card with Markdown content and optional reasoning. */
+  function createAnalysisResultCard({ title, metaText, text, emptyText, reasoningText } = {}) {
+    const card = createDomElement("article", { className: "analysis-card" });
+    card.appendChild(createDomElement("h4", { text: title || "Analysis" }));
+    card.appendChild(createDomElement("p", { className: "mono", text: metaText || "" }));
+    const body = createDomElement("div", { className: "markdown-output" });
+    renderMarkdownContent(body, text, emptyText);
+    card.appendChild(body);
+    const reasoningPanel = createReasoningPanel(reasoningText);
+    if (reasoningPanel) card.appendChild(reasoningPanel);
+    return card;
+  }
+
+  /** Build a collapsible findings card with centralized Markdown rendering. */
+  function createFindingsDetails({ title, text, emptyText, reasoningText, open = false } = {}) {
+    const details = createDomElement("details", { props: { open: Boolean(open) } });
+    details.appendChild(createDomElement("summary", { text: title || "Finding" }));
+    const body = createDomElement("div", { className: "markdown-output" });
+    renderMarkdownContent(body, text, emptyText);
+    details.appendChild(body);
+    const reasoningPanel = createReasoningPanel(reasoningText);
+    if (reasoningPanel) details.appendChild(reasoningPanel);
+    return details;
+  }
+
+  /**
+   * Open an SSE EventSource with automatic sequence deduplication.
+   *
+   * Provides a standard pattern used by parse, analysis, and chat SSE
+   * streams: open the EventSource, reset retry count on connection,
+   * deduplicate by sequence number, and delegate events to a handler.
+   *
+   * @param {string} url - The SSE endpoint URL.
+   * @param {Object} channel - State object (e.g. st.parse) with es, retryCount,
+   *     and seq properties.
+   * @param {Object} handlers - Callback map.
+   * @param {function(Object): void} handlers.onEvent - Called for each
+   *     deduplicated SSE payload.
+   * @param {function(): void} handlers.onError - Called on EventSource error
+   *     (typically triggers retry logic).
+   */
+  function openSseStream(url, channel, handlers) {
+    closeSseChannel(channel);
+    const es = new EventSource(url);
+    channel.es = es;
+    es.onopen = () => { channel.retryCount = 0; };
+    es.onmessage = (ev) => {
+      const payload = safeJson(ev.data);
+      if (!payload) return;
+      const seq = num(payload.sequence, -1);
+      if (seq >= 0) {
+        if (seq <= channel.seq) return;
+        channel.seq = seq;
+      }
+      handlers.onEvent(payload);
+    };
+    es.onerror = () => {
+      if (typeof handlers.onError === "function") handlers.onError();
+    };
+  }
+
+  /**
+   * Attempt to reconnect an SSE stream with exponential backoff.
+   *
+   * Increments the channel's retry counter, checks against
+   * SSE_MAX_RETRIES, and schedules a reconnection via setTimeout.
+   *
+   * @param {Object} channel - State object with retry, retryCount, and run
+   *     properties.
+   * @param {Object} handlers - Callback map.
+   * @param {function(): void} handlers.reconnect - Called after the delay to
+   *     re-open the SSE stream.
+   * @param {function(): void} handlers.onMaxRetries - Called when retries are
+   *     exhausted.
+   * @param {function(number, number): void} [handlers.onRetryScheduled] -
+   *     Optional callback receiving (attempt, delaySec) for UI feedback.
+   * @returns {boolean} True if a retry was scheduled, false if max retries
+   *     exceeded.
+   */
+  function retrySseStream(channel, handlers) {
+    if (channel.retry) return true;
+    const attempt = channel.retryCount + 1;
+    if (attempt > SSE_MAX_RETRIES) {
+      handlers.onMaxRetries();
+      return false;
+    }
+    channel.retryCount = attempt;
+    const delay = sseRetryDelayMs(attempt);
+    closeSseChannel(channel);
+    if (typeof handlers.onRetryScheduled === "function") {
+      handlers.onRetryScheduled(attempt, Math.ceil(delay / 1000));
+    }
+    channel.retry = window.setTimeout(() => {
+      channel.retry = null;
+      if (typeof handlers.reconnect === "function") handlers.reconnect();
+    }, delay);
+    return true;
+  }
+
+  // ── Toast notifications ────────────────────────────────────────────────────
+
+  /**
+   * Show a temporary toast notification at the top of the viewport.
+   *
+   * Creates a small floating banner that auto-dismisses after a delay.
+   * Used for feedback that cannot be placed in a step-specific message
+   * element (e.g. when the target step panel is hidden).
+   *
+   * @param {string} text - Message to display.
+   * @param {string} [kind="error"] - One of "error", "info", or "success".
+   * @param {number} [durationMs=4000] - Time in ms before auto-dismiss.
+   */
+  function showToast(text, kind = "error", durationMs = 4000) {
+    if (!text) return;
+    let container = document.getElementById("aift-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "aift-toast-container";
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    toast.className = `aift-toast aift-toast-${kind}`;
+    toast.textContent = text;
+    toast.setAttribute("role", "alert");
+    container.appendChild(toast);
+    /* Trigger reflow so the CSS transition plays. */
+    void toast.offsetWidth;
+    toast.classList.add("aift-toast-visible");
+    const dismiss = () => {
+      toast.classList.remove("aift-toast-visible");
+      toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+      /* Fallback removal if transitionend never fires. */
+      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 500);
+    };
+    setTimeout(dismiss, durationMs);
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+  return {
+    // Constants
+    STEP_IDS, RECOMMENDED_PRESET_EXCLUDED_ARTIFACTS, RECOMMENDED_PRESET_PARSE_ONLY_ARTIFACTS,
+    MODE_PARSE_AND_AI, MODE_PARSE_ONLY,
+    RECOMMENDED_PROFILE, DROP_HELP, EVIDENCE_ACCEPT, EVIDENCE_ACCEPT_EXTENSIONS,
+    CONFIDENCE_TOKEN_PATTERN, AI_MAX_TOKENS_WARNING_THRESHOLD,
+    CONFIDENCE_CLASS_MAP, SSE_MAX_RETRIES, SSE_RETRY_BASE_DELAY_MS, SSE_RETRY_MAX_DELAY_MS,
+    FETCH_TIMEOUT_API_MS, FETCH_TIMEOUT_UPLOAD_MS,
+    // State & DOM
+    st, el, q,
+    // CSRF
+    fetchCsrfToken,
+    // Case ID / operation ownership
+    setCaseId, activeCaseId, newRunOwner, isRunOwnerCurrent,
+    markParsedSelectionStale, clearParsedSelections,
+    beginEvidenceOperation, isEvidenceOperationCurrent, finishEvidenceOperation,
+    abortEvidenceOperations,
+    // Messages & timers
+    ensureMsg, setMsg, clearMsg, showToast, ensureTimer, startTimer, stopTimer,
+    // SSE
+    sseRetryDelayMs, closeSseChannel, requireModules, applyEvidenceFormatMetadata,
+    evidenceFormatMetadata,
+    // Network
+    fetchWithTimeout, handleFetchError, apiJson, readErr,
+    // Utilities
+    artifactName, cssEscape, fmtBytes, fmtNumber, safeJson, escapeHtml, val, num,
+    isObj, obj, clone,
+    toBackendProvider, toUiProvider, normProvider, prettyProvider,
+    stripLeadingReasoningBlocks, getFilename, boolSetting, fmtElapsed,
+    createDomElement, createDefinitionList, createEvidenceSummaryCard,
+    createImageFormCard, createArtifactModeSelect, createParseProgressRow,
+    createParseProgressTableHead, createReasoningPanel,
+    createAnalysisResultCard, createFindingsDetails,
+    openSseStream, retrySseStream,
+  };
+})();

@@ -1,0 +1,210 @@
+{
+  "name": "recommended",
+  "builtin": true,
+  "artifact_options": [
+    {
+      "artifact_key": "runkeys",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "tasks",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "services",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "shimcache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "amcache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "bam",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "userassist",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "recyclebin",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "browser.history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "browser.downloads",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "powershell_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "jumplist.automatic_destination",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "jumplist.custom_destination",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "shellbags",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sam",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.quarantine",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "cronjobs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "bash_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "zsh_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "fish_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "python_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "wtmp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "btmp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "lastlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "users",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "groups",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sudoers",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network.interfaces",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "syslog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ssh.authorized_keys",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ssh.known_hosts",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "authlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "iptables",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network.dhcp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "passwords",
+      "mode": "parse_only"
+    },
+    {
+      "artifact_key": "applications",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "recently_used",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "trash",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "cmdline",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "environ",
+      "mode": "parse_only"
+    },
+    {
+      "artifact_key": "processes",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sysmodules",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.tcp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.udp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "apt.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "dpkg.log",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "yum.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "zypper.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "snap",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "vmlist",
+      "mode": "parse_and_ai"
+    }
+  ]
+}

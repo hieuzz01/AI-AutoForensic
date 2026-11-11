@@ -1,0 +1,309 @@
+# Reasonix configuration.
+# Resolution order: flag > project config > ~/AppData/Roaming/reasonix/config.toml > built-in defaults.
+# Project config: ./reasonix.toml, otherwise .reasonix/reasonix.toml.
+# Fields marked user/global only are not overridden by project config.
+# Secrets are named via api_key_env and stored in Reasonix's global .env; never put keys here.
+
+config_version = 12   # schema marker for diagnostics; old versions may ignore it
+default_model = "gemini/gemini-3.8-flash"
+# language      = "zh"   # ui/model language; empty = auto-detect from $LANG / $REASONIX_LANG
+credentials_store = "auto"   # legacy compatibility; provider keys are saved in Reasonix's global .env
+
+[ui]
+theme = "auto"   # auto|dark|light; CLI colors only; REASONIX_THEME can override per run
+# theme_style = "graphite"   # graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
+# shortcut_layout = "desktop"   # classic|desktop; compatibility setting; Shift+Tab toggles Plan, Ctrl+Y toggles YOLO
+# cursor_shape = "bar"   # block|underline|bar; text input cursor shape
+# show_reasoning = true   # CLI: show thinking text by default; false = collapsed (toggle with Ctrl+O)
+show_turn_usage = true   # CLI/TUI: show per-request token and cost receipts in the transcript
+show_changed_files = true   # Studio: show the changed-files pill above the composer; false = the count stays in the branch chip
+feedback_level_notices = false   # tell me when my feedback level goes up (Studio note, /feedback list line); false = nothing is said
+fold_turn_work = false   # Studio: fold a turn's tool calls, thinking and middle sentences under one line, keeping the last sentence out; false = every step stays drawn
+show_receipt = false   # TUI and Studio: draw the end-of-turn delivery receipt card; false = one line only when something is unproven
+
+[desktop]
+# language = "zh"   # desktop UI language; empty/auto = browser/OS auto-detect
+theme = "auto"   # desktop only: auto|dark|light
+terminal_theme = "auto"   # integrated terminal: auto|dark|light; auto follows the desktop app
+# theme_style = "graphite"   # graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
+# theme_pack = "my-theme"   # a pack under <memory root>/themes; empty is the default appearance
+# external_opener = "vscode"   # desktop Open control: installed application id
+# editor = "code"   # command or path the workspace opens in; empty searches this machine
+close_behavior = "background"   # desktop: quit|background when the window close button is clicked
+tray = "auto"   # desktop: auto|off status icon; with no icon the close button quits whatever the line above says
+status_bar_style = "text"   # desktop: icon|text metric labels in the bottom status bar
+status_bar_items = ["model", "workspace", "git_branch", "cache", "cache_avg", "session_tokens", "turn_tokens", "turn_tps", "turn_output_tokens", "turn_cache_tokens", "turn_cost", "session_turns", "context", "compact", "cost", "balance"]   # desktop: ordered visible bottom status bar items
+# default_tool_approval_mode  = "allow"   # desktop: unset opens in Auto only where the OS sandbox confines writes and the folder is trusted
+check_updates = true   # desktop: check for new versions on startup
+telemetry = true   # desktop: anonymous daily ping + scrubbed next-launch native crash diagnostics + per-package market install counts (anonymous, no content); never content
+metrics = true   # desktop: aggregate quality/lifecycle metrics (anonymous signal/bucket counts) + per-package market install counts (anonymous, no content); never content
+expand_thinking = false   # desktop: legacy reasoning display alias; use reasoning_display_mode
+display_mode = "standard"   # desktop: standard|compact transcript display mode
+welcomed = true   # the opening sequence has played on this machine
+default_tool_approval_mode = "yolo"   # desktop: Ask/Auto/YOLO default for newly-created sessions
+
+[billing]
+# display_currency = "auto"   # auto|CNY|USD; display only — does not rewrite provider list prices
+
+[serve]
+# remember_paired_devices = true   # keep the phones that paired; a restart reopens the share and adopts them
+# share_port = 41234   # fixed port of the phone-access LAN link; unset picks a free one each time
+
+[notifications]
+enabled = false   # system notifications for CLI and desktop turns; default off
+turn_done = true   # notify when a turn finishes
+approval_request = true   # notify when a tool approval is waiting
+ask_request = true   # notify when a question is waiting
+feedback_reply = true   # notify when a feedback report gets a reply
+disk_low = true   # notify when the workspace or state volume is nearly full
+sound = false   # play a short chime for the events above, with or without system notifications; default off
+
+[notifications.phone]
+enabled = false   # tell enrolled phones that something is waiting (a type and a count, never text); default off
+approval = false   # a tool approval is waiting
+input = false   # the model asked a question
+error = false   # a turn failed
+
+[network]
+proxy_mode = "auto"   # auto|env|custom|off; auto currently uses env proxy
+# proxy_url  = "socks5://127.0.0.1:7890"   # optional custom override
+# no_proxy   = "localhost,127.0.0.1,.local"   # honored for proxy_mode = "custom"
+# dns        = ["223.5.5.5", "1.1.1.1"]   # resolvers to use instead of the system's
+# doh        = "https://1.1.1.1/dns-query"   # encrypted DNS; wins over `dns`
+
+[network.proxy]
+type = "socks5"   # http|https|socks5|socks5h
+# server = "127.0.0.1"
+# port = 7890
+# username = ""
+# password = "${REASONIX_PROXY_PASSWORD}"   # optional; supports ${VAR} expansion
+
+[environment]
+enabled = true   # inject a stable startup environment summary into the model prompt
+offline = false   # declare that outbound network access is unavailable; prevents futile retries
+# [environment.tools]
+# go = "/opt/homebrew/bin/go"   # trusted executable path; workspace-local paths are not auto-executed
+
+[agent]
+system_prompt = """You are V-AutoFor, an elite Digital Forensics and Incident Response (DFIR) AI platform.
+
+CRITICAL MANDATORY RULE - FORENSIC TOOL INVOCATION:
+You MUST NEVER execute raw PowerShell/Bash commands (such as Get-Content, type, cat, Select-String, python scripts) to inspect or parse forensic evidence files!
+Instead, you MUST ALWAYS invoke the specialized ForBrain FastMCP forensic tools using `use_capability` with action="call" and the exact capability_id:
+1. Evidence Integrity Verification (ISO/IEC 27037):
+   use_capability(action="call", capability_id="mcp-tool:eztools/verify_evidence_integrity", arguments={"evidence_path": "...", "companion_metadata_path": "..."})
+2. AD1 Logical Image Extraction / Listing:
+   use_capability(action="call", capability_id="mcp-tool:network_memory/ad1_extract", arguments={"ad1_path": "..."})
+   use_capability(action="call", capability_id="mcp-tool:network_memory/ad1_list", arguments={"ad1_path": "..."})
+3. Linux Log & Bash History Forensics:
+   use_capability(action="call", capability_id="mcp-tool:eztools/analyze_linux_logs", arguments={"target_dir": "..."})
+4. Windows Prefetch Forensics (.pf):
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_prefetch", arguments={"source_path": "..."})
+5. Windows Amcache Forensics (Amcache.hve):
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_amcache", arguments={"source_path": "..."})
+6. Windows Shimcache Forensics (SYSTEM):
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_shimcache", arguments={"source_path": "..."})
+7. Windows $MFT Forensics:
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_mft", arguments={"source_path": "..."})
+8. Windows Event Logs (.evtx):
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_evtx", arguments={"source_path": "..."})
+9. Windows Shellbags (UsrClass.dat):
+   use_capability(action="call", capability_id="mcp-tool:eztools/parse_shellbags", arguments={"source_path": "..."})
+10. PE Malware & Static Binary Analysis (.exe, .dll, .sys):
+    use_capability(action="call", capability_id="mcp-tool:eztools/pe_analyze", arguments={"pe_path": "..."})
+11. Autostart & Persistence Triage:
+    use_capability(action="call", capability_id="mcp-tool:sysinternals/autoruns_triage", arguments={})
+12. Memory Forensics (Volatility 3):
+    use_capability(action="call", capability_id="mcp-tool:network_memory/volatility_pslist", arguments={"image_path": "..."})
+    use_capability(action="call", capability_id="mcp-tool:network_memory/volatility_malfind", arguments={"image_path": "..."})
+13. Network PCAP Forensics:
+    use_capability(action="call", capability_id="mcp-tool:network_memory/tshark_conversations", arguments={"pcap_path": "..."})
+    use_capability(action="call", capability_id="mcp-tool:network_memory/tshark_dns_queries", arguments={"pcap_path": "..."})
+
+WHY: Every invocation of these MCP tools automatically broadcasts live telemetry events to the ForBrain Observability Monitor at http://127.0.0.1:5000 so the user can verify that specialized DFIR engines are running. When you run raw PowerShell/bash instead, the monitor stays completely empty and fails inspection.
+
+Always structure your final incident response report according to the 8-part DFIR standard in `forensic-reporting` skill."""
+temperature       = 0.0
+# recovery_model = "deepseek-pro"   # optional; falls back to guardian then main model
+# reasoning_language = "zh"   # visible reasoning language: auto|zh|en
+# turn_narration = "detailed"   # between tool calls: brief|detailed (detailed asks for a few lines per batch)
+compact_ratio       = 0.9   # fold at this share of the model window (default 0.90)
+# checkpoint_ceiling_ratio = 0.50   # how small a fold's result must be to be accepted
+# plan_mode_read_only_commands = ["gh issue view"]   # legacy compatibility only; Plan bash uses Permissions
+# embedded_diff_detection = true   # mark a shell result that is a whole unified diff so a frontend renders it as a diff (default false)
+# ask_timeout_seconds = 300   # skip an ask question, or continue a task list handed back to you, when nobody answered in this long (default 0: wait)
+# goal_auto_retry = 0   # retry a Goal paused because its completion check could not run, up to this many times in a row (max 5); user file only
+# planner_model = "deepseek-pro"   # optional: enable two-model collaboration
+# subagent_model = "deepseek-pro"   # optional default for runAs=subagent skills
+# subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }   # per-skill overrides
+# vision_model = "kimi/kimi-k2-vision"   # optional: reads images a text-only main model cannot
+# guardian_model = "deepseek-pro"   # optional: independent reviewer for risky calls
+# guardian_temperature = 0.0   # the reviewer's own sampling temperature
+# decision_model = "typesafe/system-one"   # optional: the system_one backend
+# triage_model = "deepseek-flash"   # small classifications; point it somewhere cheap
+# advisor_model = "deepseek-pro"   # optional: offers the advise tool, backed by this model
+# best_of_n = true   # parallel attempts in git worktrees; a judge applies the best
+# worktree_isolation = true   # task can run a writer in a git worktree; changes wait for apply_isolated
+# code_mode = true   # run_script: tool calls from a short script, one round trip
+# screen_external_content = true   # triage flags external results that address the agent
+# goal_token_budget = 200000   # what a /goal loop may spend before it stops
+# subagent_effort = "high"   # optional default effort for subagents
+# subagent_efforts = { review = "max", task = "high" }   # per-tool/skill effort overrides
+# max_subagent_depth = 8   # nested subagent delegation depth; 1 restores the old single-layer boundary
+# max_subagent_concurrency = 0   # session-wide sub-agent concurrency (task/fleet/skills)
+# max_parallel_writers = 0   # concurrent writers with non-overlapping write_paths
+# max_side_sessions = 0   # side conversations open at once; 0 = no limit; user file only
+# max_provider_retries = 10   # retries of a failed provider connection before the turn stops; 0 = keep trying until cancelled; user file only
+# max_queued_inputs = 0   # prompts waiting in a session's queue; 0 = no limit; user file only
+# subagent_claims = "optimistic"   # optimistic (default): a sub-agent that declared no write_paths holds only the path it is writing; strict: it holds the whole workspace; user file only
+# write_lease = "optimistic"   # optimistic (default): a writer that declared no path does not hold the whole workspace against other sessions; strict: it does; user file only
+# write_lease_max_wait_minutes = 0   # minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 = wait as long as the turn lasts (default), 120 is a sensible limit; user file only
+# plan_approval = "ask"   # auto: the plan card answers itself and execution starts; user file only
+# default_mode = "normal"   # plan: a new conversation starts in plan mode (the mode picker still switches it); a resumed one keeps its own; user file only
+# output_style = "explanatory"   # explanatory | learning | concise | custom; empty = default
+
+[[providers]]
+name        = "9router"
+kind        = "openai"
+base_url    = "http://127.0.0.1:20128/v1"
+models      = ["ds/deepseek-reasoner", "ds/deepseek-chat", "ds/deepseek-v4-pro", "ds/deepseek-v4.1-flash", "ag/claude-sonnet-5-5", "openai/gpt-5.5", "gemini/gemini-3.8-flash", "gemini/gemini-4-argon", "gemini/gemini-3.7-flash", "gemini/gemini-3.6-flash", "gemini/gemini-3.5-flash-lite", "gemini/gemini-3.1-pro-preview", "gemini/gemini-3.1-flash-lite-preview", "gemini/gemini-3-flash-preview", "gemini/gemma-4-31b-it", "glm/glm-5.3", "glm/glm-5.3-flash", "glm/glm-5.2", "glm/glm-5.1", "glm/glm-5-turbo", "glm/glm-5", "glm/glm-4.7", "glm/glm-4.6v", "groq/llama-3.3-70b-versatile", "groq/meta-llama/llama-4-maverick-17b-128e-instruct", "groq/qwen/qwen3-32b", "groq/openai/gpt-oss-120b", "ds/deepseek-v4-pro-max", "ds/deepseek-v4-pro-none", "ds/deepseek-v4-flash", "ds/deepseek-v4-flash-vision-exp", "openai/gpt-5.4", "openai/gpt-5.4-mini", "openai/gpt-5.4-nano", "openai/gpt-5.2", "openai/gpt-5.1", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano", "openai/gpt-4o", "openai/gpt-4o-mini", "openai/gpt-4-turbo", "openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano", "openai/o3", "openai/o3-mini", "openai/o3-pro", "openai/o4-mini", "openai/o1", "openai/o1-mini", "ag/gemini-4-argon-high", "ag/gemini-4-argon-medium", "ag/gemini-4-argon-low", "ag/gemini-3.8-flash-high", "ag/gemini-3.8-flash-medium", "ag/gemini-3.8-flash-low", "ag/gemini-3.8-flash", "ag/gemini-3.7-flash-high", "ag/gemini-3.7-flash-medium", "ag/gemini-3.7-flash-low", "ag/gemini-3.6-flash-high", "ag/gemini-3.6-flash-medium", "ag/gemini-3.6-flash-low", "ag/gemini-3.1-pro-high", "ag/gemini-pro-agent", "ag/gemini-3.1-pro-low", "ag/claude-sonnet-5-5-high", "ag/claude-sonnet-5-5-medium", "ag/claude-sonnet-5-5-low", "ag/claude-opus-5-5-high", "ag/claude-opus-5-5-medium", "ag/claude-opus-5-5-low", "ag/claude-opus-5-5", "ag/claude-sonnet-4-6", "ag/claude-opus-4-6-thinking", "ag/gpt-oss-120b-medium", "ac-prod/BAAI/bge-m3", "ac-prod/BAAI/bge-reranker-v2-m3", "ac-prod/MiniMax/MiniMax-M2.7", "ac-prod/MiniMax/MiniMax-M3", "ac-prod/MiniMax/MiniMax-M3-VIP", "ac-prod/OTel-2.0-LLM-31B-IT", "ac-prod/Qwen/Qwen3-4B-Instruct-2507", "ac-prod/Qwen/Qwen3-8B", "ac-prod/Qwen/Qwen3-VL-8B-Instruct", "ac-prod/Qwen/Qwen3-VL-Embedding-8B", "ac-prod/Qwen/Qwen3.5-122B-A10B-FP8", "ac-prod/Qwen/Qwen3.5-122B-A10B-FP8-NOC", "ac-prod/Qwen/Qwen3.5-35B-A3B-FP8", "ac-prod/Qwen/Qwen3.5-35B-A3B-FP8-Image", "ac-prod/Qwen/Qwen3.5-35B-A3B-FP8-NOC", "ac-prod/Qwen/Qwen3.5-4B-FT2", "ac-prod/Qwen/Qwen3.5-4B-zaic", "ac-prod/Qwen/Qwen3.5-9B", "ac-prod/Qwen/Qwen3.6-35B-A3B-FP8", "ac-prod/Qwen/Qwen3.8-27B-FP8", "ac-prod/Qwen3-8B-Telco", "ac-prod/XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B", "ac-prod/afrinllb", "ac-prod/aisingapore/Qwen-SEA-LION-v4.5-27B-IT", "ac-prod/claude-opus-5", "ac-prod/deepseek-ai/DeepSeek-OCR-2", "ac-prod/deepseek-ai/DeepSeek-V4.1-Flash", "ac-prod/embedding-dr-bge-v2", "ac-prod/embedding-loc-model", "ac-prod/google/translategemma-27b-it", "ac-prod/gpt-image-2", "ac-prod/model-canary", "ac-prod/netLLM", "ac-prod/openai/gpt-oss-120b", "ac-prod/openai/gpt-oss-120b:netmind", "ac-prod/qwen3-vl-embedding-8b", "ac-prod/sonar", "ac-prod/telemath-qwen3-8b", "ac-prod/xiaomi-research/MiLMMT-46-12B-v0.1", "ac-prod/zai-org/GLM-5.3-Flash", "ac-prod/zai-org/GLM-5.3-Flash-VIP", "mmf/mimo-auto", "oc/muse-spark-1.2-contributor-free", "oc/muse-spark-1.3-contributor-free", "oc/union-alpha", "oc/jev-1.13-free"]
+default     = "ds/deepseek-reasoner"
+api_key_env = "NINEROUTER_API_KEY"
+
+[[providers]]
+name        = "deepseek"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+models      = ["deepseek-flash", "deepseek-v4-pro"]
+default     = "deepseek-flash"
+api_key_env = "DEEPSEEK_API_KEY"
+balance_url = "https://api.deepseek.com/user/balance"   # optional; wallet-balance endpoint shown in the status bar
+context_window = 1000000   # tokens; compaction triggers near this limit
+# max_output_tokens = 0       # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
+# max_output_tokens = 32768   # ordinary coding / cost control
+# max_output_tokens = 65536   # heavy reasoning / long tool loops
+# max_output_tokens = 131072  # only after repeated finish_reason=length
+# idle_timeout_seconds = 300   # per-provider stream idle watchdog; default 300s
+prices      = { "deepseek-flash" = { cache_hit = 0.003, input = 0.15, output = 0.6, currency = "$" }, "deepseek-v4-pro" = { cache_hit = 0.022, input = 0.66, output = 1.98, currency = "$" } }   # per-model prices, per 1M tokens
+billing_currency = "USD"   # frozen list-price currency; independent of display_currency
+thinking    = "enabled"
+vision_models = ["deepseek-flash"]   # models in this provider that accept image input
+web_search  = true   # provider-executed web_search tool; omitted defaults on for supported official DeepSeek APIs
+model_overrides   = { "deepseek-flash" = { supported_efforts = ["disabled", "low", "high", "max"], default_effort = "low", vision = true }, "deepseek-v4-pro" = { supported_efforts = ["disabled", "high", "max"], default_effort = "high" } }   # per-model context/output/reasoning/vision overrides for mixed gateways
+
+[tools]
+enabled = []   # empty = all built-in tools
+bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
+mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap; per-plugin overrides may raise it
+mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
+protect_changed_files = true   # refuse a whole-file write over a change made since the agent last saw the file
+browser_tools = true   # built-in browser tools; the browser starts on first use
+mcp_resources = false   # a tool that reads resources a connected MCP server declares; user file only
+present_files = true   # let the model declare clickable file-delivery cards; user file only, reopen session to apply
+
+[tools.background_jobs]
+stalled_warning_seconds = 900   # warn once per background job after this many quiet seconds; 0 disables
+
+[tools.shell]
+# The interpreter the bash tool runs commands in; your login shell does not change it.
+# prefer = "auto"   # auto|bash|powershell|pwsh; empty/default = auto-detect
+# path   = "/opt/homebrew/bin/bash"   # absolute path to the shell executable; empty = PATH lookup
+# args   = ["-d", "Ubuntu", "--", "/bin/bash"]   # Windows: launcher arguments for path (wsl.exe); verified by running them
+
+# [tools.shell.env]   # extra variables every bash command inherits
+# BASH_ENV = "~/.reasonix/bashsandbox.rc"
+
+[lsp]
+enabled = true   # language server tools; servers launch lazily when used
+# [lsp.servers.go]
+# command = "gopls"
+# args = []
+# extensions = [".go"]
+
+[browser]
+# executable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+headless = false   # true = no window
+
+[skills]
+paths = ["E:\\Hunting-Forensics\\skills"]
+# paths = ["~/my-skills", "../shared/skills"]   # extra custom skill roots
+# excluded_paths = ["~/.agents/skills"]   # hide convention roots without deleting folders
+# disable_implicit_invocation = false   # keep skills available for automatic model invocation
+# suppress_warnings = false   # show non-fatal skill loading warnings
+# max_depth = 3   # nested scan depth; set 1 for legacy root-only discovery
+# disabled_skills = ["review"]   # hide noisy or unwanted skills
+
+[memory]
+# pinned_budget_chars = 1500   # cap pinned guidance; unset = no ceiling, /memory reports the cost
+# recall_limit = 4   # facts automatic recall may inject per turn
+# proactive = "ask"   # ask|auto|off; whether the model asks before remembering
+# recall_max_chars = 2400   # total size of that injection
+
+[permissions]
+# Per-call gating. mode = writer fallback when no rule matches: ask|allow|deny.
+# Readers always default to allow. Precedence: deny > ask > allow > fallback.
+# Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
+mode  = "allow"
+# allow_dynamic_bash = false   # advanced opt-in; deny/ask and exact rules still take precedence
+# ask_on_external_origin = false   # opt-in: ask before a call that repeats text an external result gave the task
+# deny = ["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode
+# allow = ["Bash(go test:*)", "Bash(git status:*)"]   # never prompted
+# ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
+
+[sandbox]
+# Confine tool blast radius. File-writers (write_file/edit_file/multi_edit/move_file)
+# may only write under workspace_root (empty = current dir) and allow_write extras.
+# bash = "enforce" jails each command in an OS sandbox when available;
+# without one, bash execution is refused. Empty defaults to enforce on macOS/Linux.
+# Windows has no OS-level Bash sandbox and fixes bash = "off".
+# network allows sandboxed bash egress.
+# workspace_root = ""            # default: current working directory
+# allow_write = ["/tmp"]          # extra dirs writers may also modify
+# forbid_read = []                  # dirs the agent cannot read or list
+bash    = "off"
+network = true
+host_authorities = ["ssh_agent"]   # host services bash may call; user-global
+# allow_devices = ["/dev/nvidia*"]   # host device nodes (GPU) bound into the Linux sandbox; user-global
+# allowed_domains = ["github.com", "*.npmjs.org"]   # limit bash egress to these hosts (macOS, Linux)
+
+[statusline]   # user/global only, ./reasonix.toml cannot set it
+# A custom status line: a command whose first stdout line replaces the built-in
+# data row. It receives {"model","contextUsed","contextWindow","cwd"} as JSON on stdin.
+# command = "my-statusline.sh"
+
+[secrets]   # credential protection; user/global only, ./reasonix.toml cannot override
+# filter_subprocess_env = false   # opt-in; stripping tokens breaks gh, HTTPS git push, npm publish
+# protect_sensitive_files = false   # opt-in; hiding credential files can break legitimate edit workflows
+
+# External MCP servers. type: "stdio" (default, a subprocess) | "http" | "sse".
+# ${VAR} / ${VAR:-default} are expanded from the environment in command/args/env/url/headers.
+
+[[plugins]]
+name    = "aift"
+command = "E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\.venv\\Scripts\\python.exe"
+args    = ["E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\aift_mcp.py"]
+
+[[plugins]]
+name    = "eztools"
+command = "E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\.venv\\Scripts\\python.exe"
+args    = ["E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\mcp_servers\\eztools_mcp.py"]
+
+[[plugins]]
+name    = "sysinternals"
+command = "E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\.venv\\Scripts\\python.exe"
+args    = ["E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\mcp_servers\\sysinternals_mcp.py"]
+
+
+[[plugins]]
+name    = "network_memory"
+command = "E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\.venv\\Scripts\\python.exe"
+args    = ["E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\mcp_servers\\network_memory_mcp.py"]
+
+
+[[plugins]]
+name    = "remote_triage"
+command = "E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\AIFT\\.venv\\Scripts\\python.exe"
+args    = ["E:\\Hunting-Forensics\\Forensic Tool\\Forensic AI\\mcp_servers\\remote_triage_mcp.py"]
+
+[telemetry]
+cli_metrics = "auto"   # CLI content-free usage metrics: auto|on|off; auto requires a local interactive terminal

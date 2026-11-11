@@ -1,0 +1,375 @@
+[
+  {
+    "id": "evt_1794363366579",
+    "timestamp": "2026-11-11 09:16:06",
+    "caller": "V-AutoFor AI",
+    "tool": "tshark_tls_sni",
+    "target": "C:\\Users\\Acer\\AppData\\Local\\Temp\\reasonix-session-tmp-2688386352\\kali_extract2\\Linux_Triage_kali_20261110_211200\\Network\\live_traffic_60s.pcap",
+    "params": {
+      "max_records": 150
+    },
+    "status": "SUCCESS",
+    "duration": 0.675,
+    "output_preview": "frame.time,ip.src,ip.dst,tls.handshake.extensions_server_name\nNov 11, 2026 09:12:37.542033000 SE Asia Standard Time,192.168.91.130,142.251.151.119,www.google.com"
+  },
+  {
+    "id": "evt_1794363347645",
+    "timestamp": "2026-11-11 09:15:47",
+    "caller": "V-AutoFor AI",
+    "tool": "tshark_filter",
+    "target": "C:\\Users\\Acer\\AppData\\Local\\Temp\\reasonix-session-tmp-2688386352\\kali_extract2\\Linux_Triage_kali_20261110_211200\\Network\\live_traffic_60s.pcap",
+    "params": {
+      "filter": "ip.addr == 192.168.91.1",
+      "fields": ""
+    },
+    "status": "SUCCESS",
+    "duration": 0.486,
+    "output_preview": "0.000000     1 192.168.91.130 â†’ 192.168.91.1 SSH 252 Server: Encrypted packet (len=192)\n  0.001486     2 192.168.91.130 â†’ 192.168.91.1 SSH 236 Server: Encrypted packet (len=176)\n  0.001800     3 192.168.91.1 â†’ 192.168.91.130 TCP 66 49268 â†’ ssh(22) [ACK] Seq=1 Ack=369 Win=4103 Len=0\n  0.002223     4 192.168.91.1 â†’ 192.168.91.130 SSH 156 Client: Encrypted packet (len=96)\n  0.002229     5 192.168.91.130 â†’ 192.168.91.1 TCP 60 ssh(22) â†’ 49268 [ACK] Seq=369 Ack=97 Win=501 Len=0\n  0.002469     6 192.168.91.1 â†’ 192.168.91.130 SSH 156 Client: Encrypted packet (len=96)\n  0.002474     7 192.168.91.130 â†’ 192.168.91.1 TCP 60 ssh(22) â†’ 49268 [ACK] Seq=369 Ack=193 Win=501 Len=0\n  0.002616     8 192.168.91.130 â†’ 192.168.91.1 SSH 140 Server: Encrypted packet (len=80)\n  0.003158     9 192.168.91.1 â†’ 192.168.91.130 SSH 108 Client: Encrypted packet (len=48)\n  0.003173    10 192.168.91.130 â†’ 192.168.91.1 TCP 60 ssh(22) â†’ 49268 [ACK] Seq=449 Ack=241 Win=501 Len=0\n  0.003237    11 192.168.91.1 â†’ 192.168.91.130 SSH 108 Client: Encrypted packet (len=48)\n  0.008283    12 192.168.91.130 â†’ 192.168.91.1 TCP 60 ssh(22) â†’ 49268 [FIN, ACK] Seq=449 Ack=290 Win=501 Len=0\n  0.008580    13 192.168.91.1 â†’ 192.168.91.130 TCP 66 49268 â†’ ssh(22) [ACK] Seq=290 Ack=450 Win=4103 Len=0"
+  },
+  {
+    "id": "evt_1794363346963",
+    "timestamp": "2026-11-11 09:15:46",
+    "caller": "V-AutoFor AI",
+    "tool": "tshark_filter",
+    "target": "C:\\Users\\Acer\\AppData\\Local\\Temp\\reasonix-session-tmp-2688386352\\kali_extract2\\Linux_Triage_kali_20261110_211200\\Network\\live_traffic_60s.pcap",
+    "params": {
+      "filter": "ip.addr == 104.18.37.40 || ip.addr == 141.101.90.105",
+      "fields": ""
+    },
+    "status": "SUCCESS",
+    "duration": 0.511,
+    "output_preview": "12.413016    57 192.168.91.130 â†’ 104.18.37.40 TLSv1.2 99 Application Data\n 12.413314    59 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59928 [ACK] Seq=1 Ack=40 Win=64240 Len=0\n 12.413886    65 192.168.91.130 â†’ 104.18.37.40 TLSv1.2 84 Application Data\n 12.413931    66 192.168.91.130 â†’ 104.18.37.40 TCP 60 59928 â†’ https(443) [FIN, ACK] Seq=64 Ack=1 Win=65535 Len=0\n 12.413974    67 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59928 [ACK] Seq=1 Ack=64 Win=64240 Len=0\n 12.414165    68 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59928 [ACK] Seq=1 Ack=65 Win=64239 Len=0\n 12.442531    71 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59928 [FIN, PSH, ACK] Seq=1 Ack=65 Win=64239 Len=0\n 12.442543    72 192.168.91.130 â†’ 104.18.37.40 TCP 60 59928 â†’ https(443) [ACK] Seq=65 Ack=2 Win=51280 Len=0\n 29.415612   107 192.168.91.130 â†’ 104.18.37.40 TLSv1.2 99 Application Data\n 29.415784   108 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59926 [ACK] Seq=1 Ack=40 Win=64240 Len=0\n 29.415844   109 192.168.91.130 â†’ 104.18.37.40 TLSv1.2 84 Application Data\n 29.415903   110 192.168.91.130 â†’ 104.18.37.40 TCP 60 59926 â†’ https(443) [FIN, ACK] Seq=64 Ack=1 Win=63750 Len=0\n 29.415955   111 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59926 [ACK] Seq=1 Ack=64 Win=64240 Len=0\n 29.416025   112 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59926 [ACK] Seq=1 Ack=65 Win=64239 Len=0\n 29.456318   113 104.18.37.40 â†’ 192.168.91.130 TCP 66 https(443) â†’ 59926 [FIN, PSH, ACK] Seq=1 Ack=65 Win=64239 Len=0\n 29.456366   114 192.168.91.130 â†’ 104.18.37.40 TCP 60 59926 â†’ https(443) [ACK] Seq=65 Ack=2 Win=63750 Len=0"
+  },
+  {
+    "id": "evt_1794363311434",
+    "timestamp": "2026-11-11 09:15:11",
+    "caller": "V-AutoFor AI",
+    "tool": "tshark_dns_queries",
+    "target": "C:\\Users\\Acer\\AppData\\Local\\Temp\\reasonix-session-tmp-2688386352\\kali_extract2\\Linux_Triage_kali_20261110_211200\\Network\\live_traffic_60s.pcap",
+    "params": {
+      "max_records": 200
+    },
+    "status": "SUCCESS",
+    "duration": 0.505,
+    "output_preview": "frame.time,ip.src,dns.qry.name,dns.qry.type\nNov 11, 2026 09:12:37.513529000 SE Asia Standard Time,192.168.91.130,www.google.com,1\nNov 11, 2026 09:12:37.652459000 SE Asia Standard Time,192.168.91.130,robusta.vn,1\nNov 11, 2026 09:12:37.795321000 SE Asia Standard Time,192.168.91.130,ocsp.sectigo.com,1"
+  },
+  {
+    "id": "evt_1794363310659",
+    "timestamp": "2026-11-11 09:15:10",
+    "caller": "V-AutoFor AI",
+    "tool": "tshark_conversations",
+    "target": "C:\\Users\\Acer\\AppData\\Local\\Temp\\reasonix-session-tmp-2688386352\\kali_extract2\\Linux_Triage_kali_20261110_211200\\Network\\live_traffic_60s.pcap",
+    "params": {
+      "conv_type": "ip"
+    },
+    "status": "SUCCESS",
+    "duration": 3.38,
+    "output_preview": "================================================================================\nIPv4 Conversations\nFilter:<No Filter>\n                                               |       <-      | |       ->      | |     Total     |    Relative    |   Duration   |\n                                               | Frames  Bytes | | Frames  Bytes | | Frames  Bytes |      Start     |              |\n192.168.91.130       <-> www.youtube.com         4562 6341 kB       592 95 kB        5154 6437 kB      53.341586000         6.5730\n192.168.91.130       <-> scontent.xx.fbcdn.net    1826 3239 kB       434 59 kB        2260 3298 kB      35.263356000        16.7583\n192.168.91.130       <-> certpreps.com            197 365 kB        193 25 kB         390 390 kB       38.902400000        18.9122\n192.168.91.130       <-> robusta.vn               182 702 kB        186 33 kB         368 735 kB       33.187506000        23.4898\n192.168.91.130       <-> www.googletagmanager.com     194 216 kB         92 18 kB         286 234 kB       35.250212000        17.0807\n192.168.91.130       <-> r2i.subiz.net            173 172 kB         54 9215 bytes     227 181 kB       34.963231000         2.2443\n192.168.91.130       <-> star-mini.c10r.facebook.com     107 141 kB        107 26 kB         214 167 kB       38.004659000        14.0017\n192.168.91.130       <-> www.google.com           122 104 kB         84 33 kB         206 138 kB       33.009527000        26.4992\n192.168.91.130       <-> dns.google                44 6038 bytes      45 3745 bytes      89 9783 bytes    32.981023000        26.0810\n192.168.91.130       <-> api.sbz.vn                38 13 kB          48 24 kB          86 38 kB        35.842561000        19.3652\n192.168.91.130       <-> www.gstatic.com           34 14 kB          35 12 kB          69 26 kB        42.005848000        17.2683\n192.168.91.130       <-> public-gcs.subiz-cdn.com      38 15 kB          30 6031 bytes      68 21 kB        35.250566000         1.6483\n192.168.91.130       <-> public-gcs.subiz-cdn.com      33 14 kB          31 7489 bytes      64 21 kB        36.830697000        15.3481\n192.168.91.130       <-> www.google-analytics.com      30 34 kB          32 7620 bytes      62 41 kB        35.263252000         0.9057\n192.168.91.130       <-> i.ytimg.com               27 12 kB          30 6439 bytes      57 19 kB        53.959043000         5.4873\n192.168.91.130       <-> fonts.gstatic.com         28 51 kB          28 4503 bytes      56 56 kB        11.412642000        43.7762\n192.168.91.130       <-> www.google.com            33 34 kB          17 5924 bytes      50 39 kB        52.577204000         0.5460\n192.168.91.130       <-> scontent-hkg1-1.xx.fbcdn.net      25 18 kB          23 4412 bytes      48 22 kB        39.280010000         0.2574\n192.168.91.130       <-> z-p42-instagram.c10r.instagram.com      24 14 kB          21 4003 bytes      45 18 kB        50.827926000         0.4369\n192.168.91.130       <-> www3.l.google.com         22 14 kB         "
+  },
+  {
+    "id": "evt_1794363224862",
+    "timestamp": "2026-11-11 09:13:44",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "SUCCESS",
+    "duration": 1.753,
+    "output_preview": "{\n  \"status\": \"SUCCESS\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_091343\",\n  \"pulled_files\": [\n    \"Linux_Triage_kali_20261110_211200.tar.gz\",\n    \"Chain_of_Custody_kali_20261110_211200.txt\"\n  ],\n  \"chain_of_custody\": \"=== V-AUTOFOR LINUX CHAIN OF CUSTODY ===\\nHostname: kali\\nAcquisition Timestamp: Tue Nov 10 09:13:43 PM EST 2026\\nCapture window: 60s live PCAP (started at phase A)\\nEvidence Archive: /tmp/Linux_Triage_kali_20261110_211200.tar.gz\\nSize (Bytes): 12916286\\nSHA-256 Hash:\\na759d8666c4522e70f18d7ea2ee04ce0e37c443ad06bb1e32724942d0f8cc444  /tmp/Linux_Triage_kali_20261110_211200.tar.gz\",\n  \"remote_stdout_snippet\": \"[sudo] password for kali: PCAP_OK 12296222 bytes\\nSUCCESS:/tmp/Linux_Triage_kali_20261110_211200.tar.gz:/tmp/Chain_of_Custody_kali_20261110_211200.txt\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794363125748",
+    "timestamp": "2026-11-11 09:12:05",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "FAILED",
+    "duration": 4.436,
+    "output_preview": "{\n  \"status\": \"FAILED\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_091201\",\n  \"pulled_files\": [],\n  \"chain_of_custody\": \"\",\n  \"remote_stdout_snippet\": \"[sudo] password for kali: PHASE_START_COMPLETE pcap=/tmp/Linux_Triage_kali_20261110_211200/Network/live_traffic_60s.pcap pid=14642 tool=/usr/bin/tcpdump duration=60s\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794362905986",
+    "timestamp": "2026-11-11 09:08:25",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "root"
+    },
+    "status": "ERROR",
+    "duration": 3.467,
+    "output_preview": "{\n  \"status\": \"ERROR\",\n  \"target_ip\": \"192.168.91.130\",\n  \"error_message\": \"Authentication failed.\"\n}"
+  },
+  {
+    "id": "evt_1794362769948",
+    "timestamp": "2026-11-11 09:06:09",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "SUCCESS",
+    "duration": 0.532,
+    "output_preview": "{\n  \"status\": \"SUCCESS\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_090609\",\n  \"pulled_files\": [\n    \"Linux_Triage_kali_20261110_205811.tar.gz\",\n    \"Chain_of_Custody_kali_20261110_205811.txt\"\n  ],\n  \"chain_of_custody\": \"=== V-AUTOFOR LINUX CHAIN OF CUSTODY ===\\nHostname: kali\\nAcquisition Timestamp: Tue Nov 10 09:06:08 PM EST 2026\\nCapture window: 300s live PCAP (started at phase A)\\nEvidence Archive: /tmp/Linux_Triage_kali_20261110_205811.tar.gz\\nSize (Bytes): 1207968\\nSHA-256 Hash:\\n4bb9ae1c339e41c5ac31a225dffbd02ba4c62ce969758497c083c1f56f03b54b  /tmp/Linux_Triage_kali_20261110_205811.tar.gz\",\n  \"remote_stdout_snippet\": \"WARNING: PCAP NOT FOUND at /tmp/vautofor_cap_20261110_205811.pcap (PCAP_TOOL=/usr/bin/tcpdump)\\nSUCCESS:/tmp/Linux_Triage_kali_20261110_205811.tar.gz:/tmp/Chain_of_Custody_kali_20261110_205811.txt\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794362305308",
+    "timestamp": "2026-11-11 08:58:25",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "FAILED",
+    "duration": 12.771,
+    "output_preview": "{\n  \"status\": \"FAILED\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_085812\",\n  \"pulled_files\": [],\n  \"chain_of_custody\": \"\",\n  \"remote_stdout_snippet\": \"PHASE_START_COMPLETE pcap=/tmp/vautofor_cap_20261110_205811.pcap pid=10655 tool=/usr/bin/tcpdump duration=300s\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794361993612",
+    "timestamp": "2026-11-11 08:53:13",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "SUCCESS",
+    "duration": 0.56,
+    "output_preview": "{\n  \"status\": \"SUCCESS\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_085313\",\n  \"pulled_files\": [\n    \"Linux_Triage_kali_20261110_204721.tar.gz\",\n    \"Chain_of_Custody_kali_20261110_204721.txt\"\n  ],\n  \"chain_of_custody\": \"=== V-AUTOFOR LINUX CHAIN OF CUSTODY ===\\nHostname: kali\\nAcquisition Timestamp: Tue Nov 10 08:53:12 PM EST 2026\\nCapture window: 300s live PCAP (started at phase A)\\nEvidence Archive: /tmp/Linux_Triage_kali_20261110_204721.tar.gz\\nSize (Bytes): 346297\\nSHA-256 Hash:\\nb0e594411204e9a50b310049d8016cf64dc7e43f7ecbb93867e2f74f794f47ae  /tmp/Linux_Triage_kali_20261110_204721.tar.gz\",\n  \"remote_stdout_snippet\": \"SUCCESS:/tmp/Linux_Triage_kali_20261110_204721.tar.gz:/tmp/Chain_of_Custody_kali_20261110_204721.txt\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794361654404",
+    "timestamp": "2026-11-11 08:47:34",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "pull_linux_evidence",
+    "target": "192.168.91.130",
+    "params": {
+      "user": "kali"
+    },
+    "status": "FAILED",
+    "duration": 12.553,
+    "output_preview": "{\n  \"status\": \"FAILED\",\n  \"target_ip\": \"192.168.91.130\",\n  \"os_type\": \"Linux\",\n  \"protocol\": \"SSH / SFTP (Port 22)\",\n  \"evidence_directory\": \"E:\\\\Hunting-Forensics\\\\Evidence\\\\192.168.91.130_Linux_20261111_084722\",\n  \"pulled_files\": [],\n  \"chain_of_custody\": \"\",\n  \"remote_stdout_snippet\": \"PHASE_START_COMPLETE pcap=/tmp/vautofor_cap_20261110_204721.pcap pid=7305 duration=300s\\n\",\n  \"remote_stderr_snippet\": \"\"\n}"
+  },
+  {
+    "id": "evt_1794361150537",
+    "timestamp": "2026-11-11 08:39:10",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "detect_target_os_and_ports",
+    "target": "192.168.91.130",
+    "params": {},
+    "status": "SUCCESS",
+    "duration": 6.024,
+    "output_preview": "{\n  \"target_ip\": \"192.168.91.130\",\n  \"detected_os\": \"Linux / Unix\",\n  \"confidence\": \"High\",\n  \"recommended_acquisition\": \"ssh_pull (Only Port 22 required on destination)\",\n  \"ports_status\": {\n    \"22/SSH (Linux)\": \"OPEN\",\n    \"5985/WinRM-HTTP (Windows)\": \"CLOSED\",\n    \"5986/WinRM-HTTPS (Windows)\": \"CLOSED\",\n    \"445/SMB (Windows)\": \"CLOSED\",\n    \"3389/RDP (Windows)\": \"CLOSED\"\n  }\n}"
+  },
+  {
+    "id": "evt_1794361052247",
+    "timestamp": "2026-11-11 08:37:32",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "detect_target_os_and_ports",
+    "target": "192.168.91.130",
+    "params": {},
+    "status": "SUCCESS",
+    "duration": 6.026,
+    "output_preview": "{\n  \"target_ip\": \"192.168.91.130\",\n  \"detected_os\": \"Linux / Unix\",\n  \"confidence\": \"High\",\n  \"recommended_acquisition\": \"ssh_pull (Only Port 22 required on destination)\",\n  \"ports_status\": {\n    \"22/SSH (Linux)\": \"OPEN\",\n    \"5985/WinRM-HTTP (Windows)\": \"CLOSED\",\n    \"5986/WinRM-HTTPS (Windows)\": \"CLOSED\",\n    \"445/SMB (Windows)\": \"CLOSED\",\n    \"3389/RDP (Windows)\": \"CLOSED\"\n  }\n}"
+  },
+  {
+    "id": "evt_1794360754824",
+    "timestamp": "2026-11-11 08:32:34",
+    "caller": "Agent 02 (Acquisition)",
+    "tool": "detect_target_os_and_ports",
+    "target": "192.168.91.130",
+    "params": {},
+    "status": "SUCCESS",
+    "duration": 7.536,
+    "output_preview": "{\n  \"target_ip\": \"192.168.91.130\",\n  \"detected_os\": \"Unknown\",\n  \"confidence\": \"Low\",\n  \"recommended_acquisition\": \"\",\n  \"ports_status\": {\n    \"22/SSH (Linux)\": \"CLOSED\",\n    \"5985/WinRM-HTTP (Windows)\": \"CLOSED\",\n    \"5986/WinRM-HTTPS (Windows)\": \"CLOSED\",\n    \"445/SMB (Windows)\": \"CLOSED\",\n    \"3389/RDP (Windows)\": \"CLOSED\"\n  }\n}"
+  },
+  {
+    "id": "evt_1794299229257",
+    "timestamp": "2026-11-10 15:27:09",
+    "caller": "V-AutoFor AI",
+    "tool": "sigcheck_file",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\root\\Desktop\\mimikatz\\mimikatz.exe",
+    "params": {
+      "hashes": true
+    },
+    "status": "SUCCESS",
+    "duration": 0.049,
+    "output_preview": "\u0000\n\u0000S\u0000i\u0000g\u0000c\u0000h\u0000e\u0000c\u0000k\u0000 \u0000v\u00002\u0000.\u00009\u00002\u0000 \u0000-\u0000 \u0000F\u0000i\u0000l\u0000e\u0000 \u0000v\u0000e\u0000r\u0000s\u0000i\u0000o\u0000n\u0000 \u0000a\u0000n\u0000d\u0000 \u0000s\u0000i\u0000g\u0000n\u0000a\u0000t\u0000u\u0000r\u0000e\u0000 \u0000v\u0000i\u0000e\u0000w\u0000e\u0000r\u0000\n\u0000\n\u0000C\u0000o\u0000p\u0000y\u0000r\u0000i\u0000g\u0000h\u0000t\u0000 \u0000(\u0000C\u0000)\u0000 \u00002\u00000\u00000\u00004\u0000-\u00002\u00000\u00002\u00006\u0000 \u0000M\u0000a\u0000r\u0000k\u0000 \u0000R\u0000u\u0000s\u0000s\u0000i\u0000n\u0000o\u0000v\u0000i\u0000c\u0000h\u0000\n\u0000\n\u0000S\u0000y\u0000s\u0000i\u0000n\u0000t\u0000e\u0000r\u0000n\u0000a\u0000l\u0000s\u0000 \u0000-\u0000 \u0000w\u0000w\u0000w\u0000.\u0000s\u0000y\u0000s\u0000i\u0000n\u0000t\u0000e\u0000r\u0000n\u0000a\u0000l\u0000s\u0000.\u0000c\u0000o\u0000m\u0000\n\u0000\n\u0000\n\u0000\n\u0000N\u0000o\u0000 \u0000m\u0000a\u0000t\u0000c\u0000h\u0000i\u0000n\u0000g\u0000 \u0000f\u0000i\u0000l\u0000e\u0000s\u0000 \u0000w\u0000e\u0000r\u0000e\u0000 \u0000f\u0000o\u0000u\u0000n\u0000d\u0000.\u0000\n\u0000\n\u0000\n\u0000\n\u0000"
+  },
+  {
+    "id": "evt_1794299228908",
+    "timestamp": "2026-11-10 15:27:08",
+    "caller": "V-AutoFor AI",
+    "tool": "sysinternals_strings64.exe",
+    "target": "-accepteula E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\root\\Documents\\myfirsthack\\didyouthinkwedmakeiteasy.jpg",
+    "params": {},
+    "status": "SUCCESS",
+    "duration": 0.049,
+    "output_preview": "Strings v2.54 - Search for ANSI and Unicode strings in binary images.\nCopyright (C) 1999-2021 Mark Russinovich\nSysinternals - www.sysinternals.com\n\n    1  msfconsole\n    2  systemctl status postgresql\n    3  systemctl enable postgresql\n    4  systemctl start postgresql\n    5  msfconsole\n    6  msfdb init\n    7  msfconsole\n    8  shutdown now\n    9  msfconsole \n   10  clear\n   11  history\n   12  clear\n   13  history\n   14  whoami\n   15  hack\n   16  do hack\n   17  do hack please\n   18  i am a hacker\n   19  how to hack\n   20  pwd\n   21  ls\n   22  ls -la\n   23  touch delete-me.txt\n   24  rm delete-me.txt \n   25  ls\n   26  cd Documents/\n   27  mkdir myfirsthack\n   28  cd myfirsthack/\n   29  touch hellworld.sh\n   30  vim hellworld.sh \n   31  chmod +x hellworld.sh \n   32  ./hellworld.sh \n   33  touch firstscript\n   34  vim firstscript \n   35  chmod +x firstscript \n   36  ./firstscript \n   37  vim firstscript \n   38  cp firstscript firstscript_fixed\n   39  ls\n   40  vim firstscript\n   41  vim firstscript_fixed \n   42  ./firstscript_fixed \n   43  flag<this is a flag>\n   44  ifconfig\n   45  cd ..\n   46  cd..\n   47  cd ..\n   48  cd /var/log/\n   49  ls\n   50  cd ..\n   51  cd ~\n   52  ls\n   53  pwf\n   54  pwd\n   55  top\n   56  wall -h\n   57  wall yolo\n   58  ls\n   59  pwd\n   60  cd ..\n   61  ls\n   62  cd home/\n   63  ls\n   64  cd /root\n   65  ls\n   66  cd ../root\n   67  cd ../root/Documents/myfirsthack/../../Desktop/\n   68  sl\n   69  ls\n   70  cd ../Documents/myfirsthack/\n   71  netstat\n   72  echo bob.txt\n   73  touch bob.txt \n   74  echo \"If you're still reading this file, scream cake.\"\n   75  echo \"Seriously, we'll give you a hint to answer question if you scream cake.\"\n   76  sudo visudo\n   77  ls\n   78  sudo ifng\n   79  ifconfi\n   80  apt get moo\n   81  sudo apt get moo\n   82  sudo apt install moo\n   83  sudo apt-install moo\n   84  sudo apt-get install moo\n   85  lol Castro just failed at all these commands. Someone pat him on the back. \n   86  I tried okay\n   87  history > history.txt"
+  },
+  {
+    "id": "evt_1794299149629",
+    "timestamp": "2026-11-10 15:25:49",
+    "caller": "V-AutoFor AI",
+    "tool": "extract_strings",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\root\\Documents\\myfirsthack\\didyouthinkwedmakeiteasy.jpg",
+    "params": {
+      "min_length": 4
+    },
+    "status": "SUCCESS",
+    "duration": 0.059,
+    "output_preview": "Strings v2.54 - Search for ANSI and Unicode strings in binary images.\nCopyright (C) 1999-2021 Mark Russinovich\nSysinternals - www.sysinternals.com\n\n    1  msfconsole\n    2  systemctl status postgresql\n    3  systemctl enable postgresql\n    4  systemctl start postgresql\n    5  msfconsole\n    6  msfdb init\n    7  msfconsole\n    8  shutdown now\n    9  msfconsole \n   10  clear\n   11  history\n   12  clear\n   13  history\n   14  whoami\n   15  hack\n   16  do hack\n   17  do hack please\n   18  i am a hacker\n   19  how to hack\n   20  pwd\n   21  ls\n   22  ls -la\n   23  touch delete-me.txt\n   24  rm delete-me.txt \n   25  ls\n   26  cd Documents/\n   27  mkdir myfirsthack\n   28  cd myfirsthack/\n   29  touch hellworld.sh\n   30  vim hellworld.sh \n   31  chmod +x hellworld.sh \n   32  ./hellworld.sh \n   33  touch firstscript\n   34  vim firstscript \n   35  chmod +x firstscript \n   36  ./firstscript \n   37  vim firstscript \n   38  cp firstscript firstscript_fixed\n   39  ls\n   40  vim firstscript\n   41  vim firstscript_fixed \n   42  ./firstscript_fixed \n   43  flag<this is a flag>\n   44  ifconfig\n   45  cd ..\n   46  cd..\n   47  cd ..\n   48  cd /var/log/\n   49  ls\n   50  cd ..\n   51  cd ~\n   52  ls\n   53  pwf\n   54  pwd\n   55  top\n   56  wall -h\n   57  wall yolo\n   58  ls\n   59  pwd\n   60  cd ..\n   61  ls\n   62  cd home/\n   63  ls\n   64  cd /root\n   65  ls\n   66  cd ../root\n   67  cd ../root/Documents/myfirsthack/../../Desktop/\n   68  sl\n   69  ls\n   70  cd ../Documents/myfirsthack/\n   71  netstat\n   72  echo bob.txt\n   73  touch bob.txt \n   74  echo \"If you're still reading this file, scream cake.\"\n   75  echo \"Seriously, we'll give you a hint to answer question if you scream cake.\"\n   76  sudo visudo\n   77  ls\n   78  sudo ifng\n   79  ifconfi\n   80  apt get moo\n   81  sudo apt get moo\n   82  sudo apt install moo\n   83  sudo apt-install moo\n   84  sudo apt-get install moo\n   85  lol Castro just failed at all these commands. Someone pat him on the back. \n   86  I tried okay\n   87  history > history.txt"
+  },
+  {
+    "id": "evt_1794299149339",
+    "timestamp": "2026-11-10 15:25:49",
+    "caller": "V-AutoFor AI",
+    "tool": "sigcheck_file",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\root\\Desktop\\mimikatz\\mimikatz.exe",
+    "params": {
+      "hashes": true
+    },
+    "status": "SUCCESS",
+    "duration": 0.313,
+    "output_preview": "\u0000\n\u0000S\u0000i\u0000g\u0000c\u0000h\u0000e\u0000c\u0000k\u0000 \u0000v\u00002\u0000.\u00009\u00002\u0000 \u0000-\u0000 \u0000F\u0000i\u0000l\u0000e\u0000 \u0000v\u0000e\u0000r\u0000s\u0000i\u0000o\u0000n\u0000 \u0000a\u0000n\u0000d\u0000 \u0000s\u0000i\u0000g\u0000n\u0000a\u0000t\u0000u\u0000r\u0000e\u0000 \u0000v\u0000i\u0000e\u0000w\u0000e\u0000r\u0000\n\u0000\n\u0000C\u0000o\u0000p\u0000y\u0000r\u0000i\u0000g\u0000h\u0000t\u0000 \u0000(\u0000C\u0000)\u0000 \u00002\u00000\u00000\u00004\u0000-\u00002\u00000\u00002\u00006\u0000 \u0000M\u0000a\u0000r\u0000k\u0000 \u0000R\u0000u\u0000s\u0000s\u0000i\u0000n\u0000o\u0000v\u0000i\u0000c\u0000h\u0000\n\u0000\n\u0000S\u0000y\u0000s\u0000i\u0000n\u0000t\u0000e\u0000r\u0000n\u0000a\u0000l\u0000s\u0000 \u0000-\u0000 \u0000w\u0000w\u0000w\u0000.\u0000s\u0000y\u0000s\u0000i\u0000n\u0000t\u0000e\u0000r\u0000n\u0000a\u0000l\u0000s\u0000.\u0000c\u0000o\u0000m\u0000\n\u0000\n\u0000\n\u0000\n\u0000e\u0000:\u0000\\\u0000h\u0000u\u0000n\u0000t\u0000i\u0000n\u0000g\u0000-\u0000f\u0000o\u0000r\u0000e\u0000n\u0000s\u0000i\u0000c\u0000s\u0000\\\u0000w\u0000o\u0000r\u0000k\u0000s\u0000p\u0000a\u0000c\u0000e\u0000s\u0000\\\u0000c\u00004\u00006\u0000_\u0000f\u0000i\u0000r\u0000s\u0000t\u0000h\u0000a\u0000c\u0000k\u0000_\u0000e\u0000v\u0000i\u0000d\u0000e\u0000n\u0000c\u0000e\u0000\\\u0000r\u0000o\u0000o\u0000t\u0000\\\u0000d\u0000e\u0000s\u0000k\u0000t\u0000o\u0000p\u0000\\\u0000m\u0000i\u0000m\u0000i\u0000k\u0000a\u0000t\u0000z\u0000\\\u0000m\u0000i\u0000m\u0000i\u0000k\u0000a\u0000t\u0000z\u0000.\u0000e\u0000x\u0000e\u0000:\u0000\n\u0000\n\u0000\t\u0000V\u0000e\u0000r\u0000i\u0000f\u0000i\u0000e\u0000d\u0000:\u0000\t\u0000E\u0000r\u0000r\u0000o\u0000r\u0000 \u0000a\u0000c\u0000c\u0000e\u0000s\u0000s\u0000i\u0000n\u0000g\u0000 \u0000f\u0000i\u0000l\u0000e\u0000\n\u0000\n\u0000\n\u0000\n\u0000\t\u0000L\u0000i\u0000n\u0000k\u0000 \u0000d\u0000a\u0000t\u0000e\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000P\u0000u\u0000b\u0000l\u0000i\u0000s\u0000h\u0000e\u0000r\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000C\u0000o\u0000m\u0000p\u0000a\u0000n\u0000y\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000C\u0000o\u0000m\u0000p\u0000a\u0000n\u0000y\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000D\u0000e\u0000s\u0000c\u0000r\u0000i\u0000p\u0000t\u0000i\u0000o\u0000n\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000P\u0000r\u0000o\u0000d\u0000u\u0000c\u0000t\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000P\u0000r\u0000o\u0000d\u0000 \u0000v\u0000e\u0000r\u0000s\u0000i\u0000o\u0000n\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000F\u0000i\u0000l\u0000e\u0000 \u0000v\u0000e\u0000r\u0000s\u0000i\u0000o\u0000n\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000M\u0000a\u0000c\u0000h\u0000i\u0000n\u0000e\u0000T\u0000y\u0000p\u0000e\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000M\u0000D\u00005\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000S\u0000H\u0000A\u00001\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000P\u0000E\u0000S\u0000H\u0000A\u00001\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000P\u0000E\u00002\u00005\u00006\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000S\u0000H\u0000A\u00002\u00005\u00006\u0000:\u0000\t\u0000n\u0000/\u0000a\u0000\n\u0000\n\u0000\t\u0000I\u0000M\u0000P\u0000:\u0000\t\u0000c\u00004\u00006\u0000_\u0000o]iBÿ\n\u0000\n\u0000"
+  },
+  {
+    "id": "evt_1794299142932",
+    "timestamp": "2026-11-10 15:25:42",
+    "caller": "V-AutoFor AI",
+    "tool": "extract_strings",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\root\\Documents\\myfirsthack\\didyouthinkwedmakeiteasy.jpg",
+    "params": {
+      "min_length": 6
+    },
+    "status": "SUCCESS",
+    "duration": 0.058,
+    "output_preview": "Strings v2.54 - Search for ANSI and Unicode strings in binary images.\nCopyright (C) 1999-2021 Mark Russinovich\nSysinternals - www.sysinternals.com\n\n    1  msfconsole\n    2  systemctl status postgresql\n    3  systemctl enable postgresql\n    4  systemctl start postgresql\n    5  msfconsole\n    6  msfdb init\n    7  msfconsole\n    8  shutdown now\n    9  msfconsole \n   10  clear\n   11  history\n   12  clear\n   13  history\n   14  whoami\n   15  hack\n   16  do hack\n   17  do hack please\n   18  i am a hacker\n   19  how to hack\n   20  pwd\n   21  ls\n   22  ls -la\n   23  touch delete-me.txt\n   24  rm delete-me.txt \n   25  ls\n   26  cd Documents/\n   27  mkdir myfirsthack\n   28  cd myfirsthack/\n   29  touch hellworld.sh\n   30  vim hellworld.sh \n   31  chmod +x hellworld.sh \n   32  ./hellworld.sh \n   33  touch firstscript\n   34  vim firstscript \n   35  chmod +x firstscript \n   36  ./firstscript \n   37  vim firstscript \n   38  cp firstscript firstscript_fixed\n   39  ls\n   40  vim firstscript\n   41  vim firstscript_fixed \n   42  ./firstscript_fixed \n   43  flag<this is a flag>\n   44  ifconfig\n   45  cd ..\n   46  cd..\n   47  cd ..\n   48  cd /var/log/\n   49  ls\n   50  cd ..\n   51  cd ~\n   52  ls\n   53  pwf\n   54  pwd\n   55  top\n   56  wall -h\n   57  wall yolo\n   58  ls\n   59  pwd\n   60  cd ..\n   61  ls\n   62  cd home/\n   63  ls\n   64  cd /root\n   65  ls\n   66  cd ../root\n   67  cd ../root/Documents/myfirsthack/../../Desktop/\n   68  sl\n   69  ls\n   70  cd ../Documents/myfirsthack/\n   71  netstat\n   72  echo bob.txt\n   73  touch bob.txt \n   74  echo \"If you're still reading this file, scream cake.\"\n   75  echo \"Seriously, we'll give you a hint to answer question if you scream cake.\"\n   76  sudo visudo\n   77  ls\n   78  sudo ifng\n   79  ifconfi\n   80  apt get moo\n   81  sudo apt get moo\n   82  sudo apt install moo\n   83  sudo apt-install moo\n   84  sudo apt-get install moo\n   85  lol Castro just failed at all these commands. Someone pat him on the back. \n   86  I tried okay\n   87  history > history.txt"
+  },
+  {
+    "id": "evt_1794298878385",
+    "timestamp": "2026-11-10 15:21:18",
+    "caller": "V-AutoFor AI",
+    "tool": "extract_strings",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence\\var\\log\\wtmp",
+    "params": {
+      "min_length": 4
+    },
+    "status": "SUCCESS",
+    "duration": 0.085,
+    "output_preview": "Strings v2.54 - Search for ANSI and Unicode strings in binary images.\nCopyright (C) 1999-2021 Mark Russinovich\nSysinternals - www.sysinternals.com\n\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64\nreboot\n4.13.0-kali1-amd64\nrunlevel\n4.13.0-kali1-amd64\nroot\nshutdown\n4.13.0-kali1-amd64"
+  },
+  {
+    "id": "evt_1794298805769",
+    "timestamp": "2026-11-10 15:20:05",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_extract",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "output_dir": "E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence",
+      "extracted_count": 1831
+    },
+    "status": "SUCCESS",
+    "duration": 16.908,
+    "output_preview": "Successfully extracted 1831 files from AD1 to 'E:\\Hunting-Forensics\\workspaces\\c46_firsthack_evidence'!"
+  },
+  {
+    "id": "evt_1794298744502",
+    "timestamp": "2026-11-10 15:19:04",
+    "caller": "V-AutoFor AI",
+    "tool": "extract_strings",
+    "target": "E:\\Hunting-Forensics\\workspaces\\c46-FirstHack\\extracted\\var\\log\\wtmp",
+    "params": {
+      "min_length": 4
+    },
+    "status": "SUCCESS",
+    "duration": 0.32,
+    "output_preview": "Strings v2.54 - Search for ANSI and Unicode strings in binary images.\nCopyright (C) 1999-2021 Mark Russinovich\nSysinternals - www.sysinternals.com"
+  },
+  {
+    "id": "evt_1794298580552",
+    "timestamp": "2026-11-10 15:16:20",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_list",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "path": "/var/log"
+    },
+    "status": "ERROR",
+    "duration": 0.0,
+    "output_preview": "Error reading AD1: /var/log"
+  },
+  {
+    "id": "evt_1794298580375",
+    "timestamp": "2026-11-10 15:16:20",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_list",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "path": "/root"
+    },
+    "status": "ERROR",
+    "duration": 0.008,
+    "output_preview": "Error reading AD1: /root"
+  },
+  {
+    "id": "evt_1794298579977",
+    "timestamp": "2026-11-10 15:16:19",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_extract",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "output_dir": "E:\\Hunting-Forensics\\workspaces\\c46-FirstHack\\extracted",
+      "extracted_count": 1831
+    },
+    "status": "SUCCESS",
+    "duration": 14.586,
+    "output_preview": "Successfully extracted 1831 files from AD1 to 'E:\\Hunting-Forensics\\workspaces\\c46-FirstHack\\extracted'!"
+  },
+  {
+    "id": "evt_1794298456279",
+    "timestamp": "2026-11-10 15:14:16",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_list",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "path": "/"
+    },
+    "status": "SUCCESS",
+    "duration": 0.003,
+    "output_preview": "Contents of '/' in C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1:\n- Partition 5 [14304MB]:NONAME [ext4]"
+  },
+  {
+    "id": "evt_1794298444103",
+    "timestamp": "2026-11-10 15:14:04",
+    "caller": "V-AutoFor AI",
+    "tool": "ad1_list",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "path": "/"
+    },
+    "status": "SUCCESS",
+    "duration": 5.26,
+    "output_preview": "Contents of '/' in C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1:\n- Partition 5 [14304MB]:NONAME [ext4]"
+  },
+  {
+    "id": "evt_1794298426068",
+    "timestamp": "2026-11-10 15:13:46",
+    "caller": "V-AutoFor AI",
+    "tool": "verify_evidence_integrity",
+    "target": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1",
+    "params": {
+      "companion": "C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1.txt"
+    },
+    "status": "SUCCESS",
+    "duration": 0.445,
+    "output_preview": "=== EVIDENCE INTEGRITY VERIFICATION (ISO/IEC 27037) ===\nTarget File: C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1\nSize: 87,719,990 bytes (83.66 MB)\nMD5:    e27ee6ce0fff0d6c93de2b8816741cab\nSHA-1:  434912b167889a5d992855917f80651f1274563b\nSHA-256:130d91294aaa402a7a8770e5b81aabc76cb333019cf07a795b91cb9d4f72fe5b\n\nCompanion Metadata Found: C:\\Users\\Acer\\Downloads\\64-Insider\\temp_extract_dir\\c46-FirstHack\\FirstHack.ad1.txt\n- MD5 vs Metadata: NO MATCH / NOT FOUND\n- SHA-1 vs Metadata: NO MATCH / NOT FOUND\n\n--- METADATA SNIPPET ---\n﻿Created By AccessData® FTK® Imager 4.5.0.3 \n\nCase Information: \nAcquired using: ADI4.5.0.3\nCase Number: \nEvidence Number: \nUnique Description: \nExaminer: \nNotes: \n\n--------------------------------------------------------------\n\nInformation for D:\\Users\\Mawso3a\\Desktop\\FirstHack.ad1:\n[Custom Content Sources]\n Horcrux.E01:Partition 5 [14304MB]:NONAME [ext4]|[root]|boot|*(Wildcard,Consider Case,Include Subdirectories)\n Horcrux.E01:Partition 5 [14304MB]:NONAME [ext4]|[root]|var|log|*(Wildcard,Consider Case,Include Subdirectories)\n Horcrux.E01:Partition 5 [14304MB]:NONAME [ext4]|[root]|root|*(Wildcard,Consider Case,Include Subdirectories)\n[Computed Hashes]\n MD5 checksum:    f7c4fab05c3a7473ed59b549eef5a509\n SHA1 checksum:   8875899aa4c6498b410250d48503f64e283528e9\n\nImage information:\n Acquisition started:   Tue May 25 15:33:49 2021\n Acquisition finished:  Tue May 25 15:34:32 2021\n Segment list:\n  D:\\Users\\0xMohammed\\Desktop\\FirstHack.ad1\n\nImage Verification Results:\n Verification started:  Tue May 25 15:34:33 2021\n Verification finished: Tue May 25 15:34:39 2021\n MD5 checksum:    f7c4fab05c3a7473ed59b549eef5a509 : verified\n SHA1 checksum:   8875899aa4c6498b410250d48503f64e283528e9 : verified\n"
+  }
+]

@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en">
+  <head>
+    <title>RawCap - A raw socket sniffer for Windows</title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+    <meta property="og:title" content="RawCap - A raw socket sniffer for Windows" />
+    <meta property="og:site_name" content="Netresec" />
+    <meta property="og:type" content="article" />
+    <meta http-equiv="Content-Language" content="en" />
+    <meta name="msapplication-starturl" content="https://www.netresec.com" />
+    <meta name="description" content="Can sniff localhost traffic on windows" />
+    <meta property="og:description" content="Can sniff localhost traffic on windows" />
+    <meta name="keywords" content="localhost, loopback, 127.0.0.1, pcap, windows, cap, wireshark" />
+    <link rel="icon" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="icon" sizes="144x144" href="/favicon-144x144.png" />
+    <link rel="icon" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="icon" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <meta name="msapplication-TileImage" content="https://media.netresec.com/images/Netresec_N_144x144.png" />
+    <meta name="msapplication-TileColor" content="#ffffff" />
+    <meta name="viewport" content="width=850, initial-scale=1" />
+    <link rel="stylesheet" type="text/css" href="/style.css" />
+    <link rel="alternate" type="application/rss+xml" title="NETRESEC Network Security Blog" href="https://www.netresec.com/rss.ashx" />
+    <link rel="canonical" href="https://www.netresec.com/?page=RawCap" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:site" content="@netresec" />
+    <meta name="twitter:creator" content="@netresec" />
+    <meta name="twitter:title" content="RawCap - A raw socket sniffer for Windows" />
+    <meta name="twitter:description" content="Can sniff localhost traffic on windows" />
+    <meta name="fediverse:creator" content="@netresec@infosec.exchange" />
+    <meta name="twitter:image" content="https://www.netresec.com/images/RawCap_logo_PA2_180x180.png" />
+    <meta property="og:image" content="https://www.netresec.com/images/RawCap_logo_PA2_180x180.png" />
+  </head>
+  <body>
+    <div class="middle">
+      <div id="pageHeader" style="min-height: 144px;">
+        <header>
+          <span style="align: right; float: right; vertical-align: top;">Experts in network security monitoring and network forensics</span>
+          <a href="https://www.netresec.com/">
+            <img src="/images/Netresec_Logo_550x140.png" width="275" height="70" alt="Netresec" style="margin-left: 16px" />
+          </a>
+        </header>
+        <nav>
+          <span>
+            <a href="/?page=Home">NETRESEC</a>|</span>
+          <span>
+            <a href="/?page=Products">Products</a>|</span>
+          <span>
+            <a href="/?page=Training">Training</a>|</span>
+          <span>
+            <a href="/?page=Resources">Resources</a>|</span>
+          <span>
+            <a href="/?page=Blog">Blog</a>|</span>
+          <span>
+            <a href="/?page=AboutNetresec">About Netresec</a>
+          </span>
+        </nav>
+        <span class="path">
+          <a href="/">NETRESEC</a>
+    »
+    <a href="/?page=Products">Products</a>
+    »
+    <a href="/?page=RawCap">RawCap</a></span>
+      </div>
+      <div id="pageBody">
+        <div class="greensidepane" style="text-align: center">
+          <a href="https://www.netresec.com/?download=RawCap">
+            <img src="/images/RawCap_logo_PA2_180x180.png" alt="RawCap logo" border="0" width="180" height="180" />
+          </a>
+          <p>
+            <b>
+              <a href="https://www.netresec.com/?download=RawCap">Download RawCap.exe</a>
+            </b>
+          </p>
+        </div>
+        <h1>RawCap</h1>
+        <p>
+      RawCap is a free command line network sniffer for Windows that uses raw sockets.
+    </p>
+        <p>
+      Quick RawCap facts:
+      <ul><li>Can sniff any interface that has got an IPv4 address, including 127.0.0.1 (localhost/loopback)</li><li>RawCap.exe is just 48 kB</li><li>No external libraries or DLL's needed other than .NET Framework</li><li>No installation required, just download RawCap.exe and sniff</li><li>Captures from any type of network, including WiFi, VPN, WWAN (Mobile Broadband) and PPP interfaces</li><li>Simple to use</li></ul></p>
+        <h2>Usage</h2>
+        <p>
+      You will need administrator privileges to run RawCap.
+
+      <div class="commandLine">
+        F:\Tools&gt;RawCap.exe --help<br />
+        NETRESEC RawCap version 0.2.0.0<br /><br />
+        Usage: RawCap.exe [OPTIONS] &lt;interface&gt; &lt;pcap_target&gt;<br />
+         &lt;interface&gt; can be an interface number or IP address<br />
+         &lt;pcap_target&gt; can be filename, stdout (-) or named pipe (starting with \\.\pipe\)<br /><br />
+        OPTIONS:<br />
+         -f          Flush data to file after each packet (no buffer)<br />
+         -c &lt;count&gt;  Stop sniffing after receiving &lt;count&gt; packets<br />
+         -s &lt;sec&gt;    Stop sniffing after &lt;sec&gt; seconds<br />
+         -m          Disable automatic creation of RawCap firewall entry<br />
+         -q          Quiet, don't print packet count to standard out<br /><br />
+        INTERFACES:<br />
+         0.     IP        : 169.254.63.243<br />
+                NIC Name  : Local Area Connection<br />
+                NIC Type  : Ethernet<br /><br />
+         1.     IP        : 192.168.1.129<br />
+                NIC Name  : WiFi<br />
+                NIC Type  : Wireless80211<br /><br />
+         2.     IP        : 127.0.0.1<br />
+                NIC Name  : Loopback Pseudo-Interface 1<br />
+                NIC Type  : Loopback<br /><br />
+         3.     IP        : 10.165.240.132<br />
+                NIC Name  : Mobile 12<br />
+                NIC Type  : Wwanpp<br /><br />
+        Example 1: RawCap.exe 0 dumpfile.pcap<br />
+        Example 2: RawCap.exe -s 60 127.0.0.1 localhost.pcap<br />
+        Example 3: RawCap.exe 127.0.0.1 \\.\pipe\RawCap<br />
+        Example 4: RawCap.exe -q 127.0.0.1 - | Wireshark.exe -i - -k<br /></div></p>
+        <p>
+      An alternative to supplying the interface number is to supply the IP address of the preferred interface instead, i.e. like this:
+      <div class="commandLine">
+        RawCap.exe 127.0.0.1 localhost_capture.pcap
+      </div></p>
+        <h2>Interactive Console Dialog</h2>
+        <p>
+      You can also start RawCap without any arguments, this will leave you with an interactive dialog:
+      <div class="commandLine">
+        F:\Tools&gt;RawCap.exe<br />
+        Network interfaces:<br />
+        0.     192.168.0.17    Local Area Connection<br />
+        1.     192.168.0.47    Wireless Network Connection<br />
+        2.     90.130.211.54   3G UMTS Internet<br />
+        3.     192.168.111.1   VMware Network Adapter VMnet1<br />
+        4.     192.168.222.1   VMware Network Adapter VMnet2<br />
+        5.     127.0.0.1       Loopback Pseudo-Interface<br />
+        Select network interface to sniff [default '0']: 1<br />
+        Output path or filename [default 'dumpfile.pcap']:<br />
+        Sniffing IP : 192.168.0.47<br />
+        Output File : dumpfile.pcap<br />
+         --- Press [Ctrl]+C to stop ---<br />
+        Packets     : 1337
+      </div></p>
+        <h2>Streaming PCAP to Wireshark</h2>
+        <p>
+      The easiest way to analyze packets captured by RawCap in Wireshark is to save them to a capture file and open it in Wireshark.
+      But you can also use alternative output methods to analyze the captured packets using Wireshark in real-time.
+    </p>
+        <p>
+      The simplest way to analyze packets in real-time is to write the PCAP data to standard output (stdout) using the "-" switch, and then reading that data in Wireshark with the "-i -" switch.
+      <div class="commandLine">
+        RawCap.exe -q 127.0.0.1 - | Wireshark.exe -i - -k
+      </div></p>
+        <p>
+      Another alternative is to write the PCAP data to a named pipe, and then let Wireshark "sniff" packets from that named pipe.
+
+      <ol><li>
+          Start RawCap and let it write PCAP data to a named pipe called "RawCap". <br /><div class="commandLine">
+            RawCap.exe 127.0.0.1 \\.\pipe\RawCap
+          </div></li><li>Start Wireshark (version 2.3.0 or later)</li><li>Click: Capture &gt; Options</li><li>Click "Manage Interfaces..."</li><li>Select the "Pipes" tab</li><li>Click the "+" button to add a named pipe</li><li>Name the pipe "\\.\pipe\RawCap" and press ENTER to save it</li><img src="https://www.netresec.com/images/Wireshark-Manage-Interfaces-RawCap.png" alt="RawCap named pipe interface added in Wireshark" width="299" height="245" style="clear: both;" /><li>Click "OK" in the Manage Interface window</li><img src="https://www.netresec.com/images/Wireshark-Capture-Interfaces-RawCap-named-pipe.png" alt="Wireshark with a PacketCache pipe interface" width="576" height="383" style="clear: both;" /><li>Click "Start" to see the packets sniffed by RawCap in real-time</li></ol></p>
+        <h2>Old vs. New RawCap Version</h2>
+        <p>
+      The new RawCap versionis better than the previous version in many ways, but there are a couple of drawbacks.
+      
+      We therefore let the user choose which version to download.
+    </p>
+        <p>
+          <table>
+            <tr>
+              <td />
+              <th>RawCap 0.1.5.0 (old)</th>
+              <th>RawCap 0.2.1.0 (new)</th>
+            </tr>
+            <tr>
+              <td>Release year</td>
+              <td>2013</td>
+              <td>2022</td>
+            </tr>
+            <tr>
+              <td>Save packets in PCAP file</td>
+              <td>
+            ✅
+          </td>
+              <td>
+            ✅
+          </td>
+            </tr>
+            <tr>
+              <td>Write packets to standard output (stdout)</td>
+              <td />
+              <td>
+            ✅
+          </td>
+            </tr>
+            <tr>
+              <td>Write packets to named pipe</td>
+              <td />
+              <td>
+            ✅
+          </td>
+            </tr>
+            <tr>
+              <td>Automatic firewall configuration</td>
+              <td />
+              <td>
+            ✅
+          </td>
+            </tr>
+            <tr>
+              <td>Capture from any IPv4 address</td>
+              <td>
+            ✅
+          </td>
+              <td>
+            ✅
+          </td>
+            </tr>
+            <tr>
+              <td>IPv6 support</td>
+              <td />
+              <td />
+            </tr>
+            <tr>
+              <td>
+            Target .NET framework
+          </td>
+              <td>
+                <a href="https://www.microsoft.com/en-us/download/details.aspx?id=21">.NET Framework 2.0</a>
+              </td>
+              <td>.NET Framework 4.7.2</td>
+            </tr>
+            <tr>
+              <td>File size</td>
+              <td>23 kB</td>
+              <td>54 kB</td>
+            </tr>
+            <tr>
+              <td />
+              <td>
+                <a href="https://www.netresec.com/?download=RawCap-old" class="sfdl sfdl-lite">Download Old Version</a>
+              </td>
+              <td>
+                <a href="https://www.netresec.com/?download=RawCap" class="sfdl sfdl-lite">Download New Version</a>
+              </td>
+            </tr>
+          </table>
+        </p>
+        <h2>Raw sockets limitations (OS dependent)</h2>
+        <p>
+          <b>
+        IPv6
+      </b>
+        </p>
+        <p>
+      RawCap cannot capture packets from IPv6 interfaces.
+      This also include the localhost IPv6 interface associated with address ::1.
+      Unfortunately the name "localhost" often resolves to ::1 rather than 127.0.0.1, which can cause confusion.
+      Therefore, when trying to capture application traffic on localhost, make sure the monitored application is connecting to "127.0.0.1" rather than "localhost".
+    </p>
+        <p>
+          <b>Sniffing localhost</b>
+        </p>
+        <p>
+      Sniffing localhost/loopback (127.0.0.1) has some limitations under Windows XP.
+      When sniffing localhost traffic in Windows XP you will only be able to capture UDP and ICMP packets, not TCP.<br />
+      TCP, UDP and ICMP packets can, however, all be sniffed properly from localhost on newer operating systems like Windows Vista and Windows 7.
+    </p>
+        <p>
+          <b>External interfaces</b>
+        </p>
+        <p>
+      Windows Vista can't capture outgoing packets, only incoming.
+    </p>
+        <p>
+      If you, on the other hand, find that you are only able to sniff OUTGOING packets
+      then you probably just need to add an exception for RawCap in your local firewall.
+      To create an exception, simply follow these steps:
+      <ul><li>Run WF.msc (i.e. the "Windows Firewall with Advanced Security")</li><li>Select "Inbound Rules"</li><li>Click "New Rule"</li><li>Select "Program" and click "Next"</li><li>Enter the path of RawCap.exe and click "Next"</li><li>Click "Next" a couple of times more, then you're done!</li></ul><img src="/images/RawCap_FW-Rule_433x581.png" alt="RawCap Firewall Rule to allow sniffing of incoming packets" style="clear: both;" width="433" height="581" /><br /><i>
+        Firewall rule to allow RawCap to sniff incoming packets.
+      </i></p>
+        <p>
+          <b>Gigantic Packets due to Offloading</b>
+        </p>
+        <p>
+      If you get a SocketException saying something like "the buffer used to receive a datagram into was smaller than the datagram itself",
+      then you probably have Large Send Offload (LSO) enabled on your network interface.
+      This feature is also known as TCP Segmentation Offload (TSO) and is used to reduce CPU overhead for packet processing, in particular on virtual machines.
+    </p>
+        <p>
+      Newer versions of RawCap will print the following error message when a too large packet is received:
+    </p>
+        <div class="commandLine">
+      Warning: Skipped packet larger than 65536. Consider disabling Large Send Offload (LSO) on NIC.
+    </div>
+        <p>
+      You can disable LSO by changing the value for "Large Send Offload V2 (IPv4)" in the network adapter's advanced settings, as show in this screenshot:
+    </p>
+        <img src="/images/LSO_ip4_disabled_400x371.png" alt="Disable Large Send Offload V2 (IPv4)" style="clear: both;" width="400" height="371" />
+        <br />
+        <i>Image credit: Rene Perraux</i>
+        <p>LSO can also be dissabled programmatically using PowerShell:</p>
+        <div class="commandLine">
+      Disable-NetAdapterLso -Name "MyAdapter" -IPv4
+    </div>
+        <h2>Adding Fake Ethernet Headers</h2>
+        <p>
+      PCAP files created with RawCap use the "DLT_RAW" aka "RAW_IP" encapsulation type.
+      This means that all frames in the capture file start with an IP header instead of, for example, an Ethernet header.
+      Unfortunately not all tools support the Raw IP encap type.
+      But you can prepend a fake Ethernet header to all frames in a PCAP file by using tcprewrite like this:
+    </p>
+        <div class="commandLine">
+      tcprewrite --infile dumpfile.pcap --outfile ethernet.pcap --dlt=enet --enet-smac=00 --enet-dmac=00
+    </div>
+        <h2>License</h2>
+        <p>
+      RawCap is freeware and can be used by anyone, i.e. even commercial use is allowed.<br />
+      You are, however, NOT allowed to:
+      <ul><li>Re-brand RawCap under a different name or vendor</li><li>Re-distribute RawCap from a website other than netresec.com</li><li>Sell RawCap</li><li>Include RawCap as part of a commercial tool</li></ul></p>
+        <h2>More information</h2>
+        <p>
+
+      You can read more about RawCap in our blog posts
+      "<a href="/?page=Blog&amp;month=2011-04&amp;post=RawCap-sniffer-for-Windows-released">RawCap sniffer for Windows released</a>" (2011) and
+      "<a href="https://netresec.com/?b=201683e">RawCap Redux</a>" (2020).
+      As well as other <a href="https://www.netresec.com/?page=Blog&amp;tag=RawCap">blog posts tagged with RawCap</a>.
+    </p>
+        <p>
+          <a href="https://www.netresec.com/?download=RawCap" class="sfdl sfdl-lite" style="margin: 20px; float: none;">
+            <b>Download RawCap.exe</b>
+          </a>
+        </p>
+      </div>
+      <footer>
+        <span>𝙽𝙴𝚃𝚁𝙴𝚂𝙴𝙲</span> |
+          <span><a href="/?page=AboutNetresec">Contact</a></span>
+          |
+          <span><a href="/?page=Privacy">Privacy</a></span>
+          |
+          <span><a rel="me" href="https://infosec.exchange/@netresec">Mastodon</a></span>
+          |
+          <span><a rel="me" href="https://bsky.app/profile/netresec.com">Bluesky</a></span>
+          |
+          <span><a rel="nofollow me" href="https://x.com/netresec">𝕏</a></span>
+          |
+          <span><a href="https://www.netresec.com/rss.ashx">RSS</a></span></footer>
+    </div>
+  </body>
+</html>

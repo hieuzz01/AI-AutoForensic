@@ -1,0 +1,77 @@
+"""AIFT application entry point.
+
+This module serves as the main entry point for the AI Forensic Triage (AIFT)
+application. It validates the Python runtime version, loads the YAML
+configuration, creates the Flask application, and starts the local development
+server. A browser window is automatically opened after a short delay.
+
+Usage::
+
+    python aift.py
+"""
+
+from __future__ import annotations
+
+import sys
+import threading
+import webbrowser
+
+from runtime_compat import UnsupportedPythonVersionError, assert_supported_python_version
+
+
+def main() -> None:
+    """Load configuration, create the Flask app, and start the development server.
+
+    Reads server host and port from ``config/config.yaml``, creates the Flask
+    application via the application factory, schedules a browser launch
+    after a 1-second delay, and starts the Flask development server with
+    the reloader and debug mode disabled.
+
+    Raises:
+        UnsupportedPythonVersionError: If the active Python version falls
+            outside the supported range (3.10 -- 3.13).
+    """
+    assert_supported_python_version()
+
+    from app import create_app
+    from app.utils.config import ConfigurationError, load_config
+
+    try:
+        config = load_config()
+    except ConfigurationError as exc:
+        print(
+            f"ERROR: Cannot start AIFT — invalid configuration:\n"
+            + "\n".join(f"  - {e}" for e in exc.errors),
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
+
+    server_config = config.get("server", {})
+    host = server_config.get("host", "127.0.0.1")
+    port = int(server_config.get("port", 5000))
+
+    app = create_app(config=config)
+    url = f"http://{host}:{port}"
+
+    def _open_browser() -> None:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            # Browser launch failures should not prevent server startup.
+            pass
+
+    browser_timer = threading.Timer(1.0, _open_browser)
+    browser_timer.daemon = True
+    browser_timer.start()
+    try:
+        app.run(host=host, port=port, debug=False, use_reloader=False)
+    finally:
+        browser_timer.cancel()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except UnsupportedPythonVersionError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from None

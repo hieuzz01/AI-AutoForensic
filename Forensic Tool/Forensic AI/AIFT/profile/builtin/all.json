@@ -1,0 +1,418 @@
+{
+  "name": "all",
+  "builtin": true,
+  "artifact_options": [
+    {
+      "artifact_key": "runkeys",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "tasks",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "services",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "cim",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "shimcache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "amcache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "prefetch",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "bam",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "userassist",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "evtx",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.evtx",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mft",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "usnjrnl",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "recyclebin",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "browser.history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "browser.downloads",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "powershell_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "activitiescache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "jumplist.automatic_destination",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "jumplist.custom_destination",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sru.network_data",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sru.application",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "shellbags",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "usb",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "muicache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sam",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.quarantine",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "lnk",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.run",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.recentdocs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.opensave",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.lastvisited",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.acmru",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.networkdrive",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.mstsc",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mru.msoffice",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "firewall.rules",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "firewall.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.exclusions",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.mplog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defender.mpcmdrun",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "recentfilecache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "startupinfo",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "wer",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "wua_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "thumbcache",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "trusteddocs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "auditpol",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ual",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ad.users",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ad.computers",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ad.group_policies",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "certlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "mssql.errorlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "lsa.secrets",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "defaultpassword.defaultpassword",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "winlogon.winlogon",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "credhist.credhist",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "dpapi.keyprovider",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "cronjobs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "commandhistory",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "bash_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "zsh_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "fish_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "python_history",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "wtmp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "btmp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "lastlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "users",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "groups",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sudoers",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network.interfaces",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "syslog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "journalctl",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "packagemanager",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ssh.authorized_keys",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "ssh.known_hosts",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "authlog",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "audit",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "atop",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "iptables",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "network.dhcp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "passwords",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "applications",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "recently_used",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "trash",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "cmdline",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "environ",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "processes",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sysmodules",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.tcp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.udp",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.raw",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.packet",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "sockets.unix",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "apt.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "dpkg.log",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "dpkg.status",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "yum.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "zypper.logs",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "snap",
+      "mode": "parse_and_ai"
+    },
+    {
+      "artifact_key": "vmlist",
+      "mode": "parse_and_ai"
+    }
+  ]
+}

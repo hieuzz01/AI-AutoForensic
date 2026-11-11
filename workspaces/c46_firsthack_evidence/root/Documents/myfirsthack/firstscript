@@ -1,0 +1,3 @@
+pwd
+ip route | grep default
+netstat | grep 80

@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "overrides": [
+    {
+      "kind": "mcp",
+      "scope": "global",
+      "source": "user_config",
+      "name": "aift",
+      "enabled": true
+    },
+    {
+      "kind": "mcp",
+      "scope": "global",
+      "source": "user_config",
+      "name": "eztools",
+      "enabled": true
+    },
+    {
+      "kind": "mcp",
+      "scope": "global",
+      "source": "user_config",
+      "name": "sysinternals",
+      "enabled": true
+    }
+  ]
+}

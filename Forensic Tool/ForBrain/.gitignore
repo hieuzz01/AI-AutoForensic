@@ -1,0 +1,69 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and packaging artifacts
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# Test, lint, and coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+test_data/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment files
+.env
+.env.*
+
+# Runtime-generated project data
+cases/
+
+# Logs
+*.log
+
+# Node.js (JS test tooling only)
+node_modules/
+
+# Local tests
+local_tests/
+
+release notes/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local config files can contain API keys. Keep new YAML files ignored by
+# default; force-add intentional non-secret YAML when needed.
+*.yaml
+*.yml
+*.yaml.tmp
+*.yml.tmp
+!.github/workflows/*.yaml
+!.github/workflows/*.yml
+!config/artifact_ai_columns.yaml
+
+SPECs/
+
+# pdoc build output
+_site/
+
+# Wiki (maintained in separate GitHub Wiki repo)
+wiki/

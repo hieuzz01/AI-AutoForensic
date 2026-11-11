@@ -1,0 +1,87 @@
+    1  msfconsole
+    2  systemctl status postgresql
+    3  systemctl enable postgresql
+    4  systemctl start postgresql
+    5  msfconsole
+    6  msfdb init
+    7  msfconsole
+    8  shutdown now
+    9  msfconsole 
+   10  clear
+   11  history
+   12  clear
+   13  history
+   14  whoami
+   15  hack
+   16  do hack
+   17  do hack please
+   18  i am a hacker
+   19  how to hack
+   20  pwd
+   21  ls
+   22  ls -la
+   23  touch delete-me.txt
+   24  rm delete-me.txt 
+   25  ls
+   26  cd Documents/
+   27  mkdir myfirsthack
+   28  cd myfirsthack/
+   29  touch hellworld.sh
+   30  vim hellworld.sh 
+   31  chmod +x hellworld.sh 
+   32  ./hellworld.sh 
+   33  touch firstscript
+   34  vim firstscript 
+   35  chmod +x firstscript 
+   36  ./firstscript 
+   37  vim firstscript 
+   38  cp firstscript firstscript_fixed
+   39  ls
+   40  vim firstscript
+   41  vim firstscript_fixed 
+   42  ./firstscript_fixed 
+   43  flag<this is a flag>
+   44  ifconfig
+   45  cd ..
+   46  cd..
+   47  cd ..
+   48  cd /var/log/
+   49  ls
+   50  cd ..
+   51  cd ~
+   52  ls
+   53  pwf
+   54  pwd
+   55  top
+   56  wall -h
+   57  wall yolo
+   58  ls
+   59  pwd
+   60  cd ..
+   61  ls
+   62  cd home/
+   63  ls
+   64  cd /root
+   65  ls
+   66  cd ../root
+   67  cd ../root/Documents/myfirsthack/../../Desktop/
+   68  sl
+   69  ls
+   70  cd ../Documents/myfirsthack/
+   71  netstat
+   72  echo bob.txt
+   73  touch bob.txt 
+   74  echo "If you're still reading this file, scream cake."
+   75  echo "Seriously, we'll give you a hint to answer question if you scream cake."
+   76  sudo visudo
+   77  ls
+   78  sudo ifng
+   79  ifconfi
+   80  apt get moo
+   81  sudo apt get moo
+   82  sudo apt install moo
+   83  sudo apt-install moo
+   84  sudo apt-get install moo
+   85  lol Castro just failed at all these commands. Someone pat him on the back. 
+   86  I tried okay
+   87  history > history.txt
